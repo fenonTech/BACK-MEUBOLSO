@@ -75,9 +75,17 @@ const armazenarCodigo = async function (
 
 /**
  * VALIDAR CÓDIGO TEMPORÁRIO
+ * NOTA: O código pode ser usado múltiplas vezes até expirar
  */
 const validarCodigoTemp = async function (telefone, codigo) {
   try {
+    console.log("🔍 [VALIDAR CÓDIGO] Parâmetros recebidos:", {
+      telefone,
+      codigo,
+      tipoCodigo: typeof codigo,
+      tipoTelefone: typeof telefone,
+    });
+
     const { data, error } = await supabase
       .from("codigo_temp")
       .select("*")
@@ -85,8 +93,16 @@ const validarCodigoTemp = async function (telefone, codigo) {
       .eq("codigo", codigo)
       .single();
 
+    console.log("📊 [VALIDAR CÓDIGO] Resultado da query:", {
+      encontrou: !!data,
+      erro: error?.message || null,
+      codigoNoBanco: data?.codigo,
+      telefonNoBanco: data?.telefone,
+      expiraEm: data?.expira_em,
+    });
+
     if (error || !data) {
-      console.log("Código não encontrado");
+      console.log("❌ [VALIDAR CÓDIGO] Código não encontrado no banco");
       return false;
     }
 
@@ -94,14 +110,22 @@ const validarCodigoTemp = async function (telefone, codigo) {
     const agora = new Date();
     const expiraEm = new Date(data.expira_em);
 
+    console.log("⏰ [VALIDAR CÓDIGO] Verificação de expiração:", {
+      agora: agora.toISOString(),
+      expiraEm: expiraEm.toISOString(),
+      expirou: agora > expiraEm,
+      diferençaMinutos: Math.floor((expiraEm - agora) / 1000 / 60),
+    });
+
     if (agora > expiraEm) {
-      console.log("Código expirado");
+      console.log("❌ [VALIDAR CÓDIGO] Código expirado");
       return false;
     }
 
+    console.log("✅ [VALIDAR CÓDIGO] Código válido! Pode ser usado novamente.");
     return data;
   } catch (error) {
-    console.error("Erro ao validar código:", error);
+    console.error("❌ [VALIDAR CÓDIGO] Erro ao validar código:", error);
     return false;
   }
 };

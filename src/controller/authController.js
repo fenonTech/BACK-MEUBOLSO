@@ -257,10 +257,11 @@ const login = async function (dados, contentType) {
       expiresIn: jwtExpires,
     });
 
-    // 5. Deletar código usado
-    await authDAO.deletarCodigo(dados.telefone);
+    // NOTA: O código NÃO é deletado após login
+    // Pode ser reutilizado até expirar (5 minutos)
+    // Apenas será atualizado quando um novo código for solicitado
 
-    // 6. Retornar resposta
+    // 5. Retornar resposta
     return {
       status: MESSAGE.SUCCESS_REQUEST.status,
       status_code: MESSAGE.SUCCESS_REQUEST.status_code,
