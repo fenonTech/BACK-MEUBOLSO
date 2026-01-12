@@ -40,7 +40,7 @@ const verificarToken = async (request, response, next) => {
     const token = parts[1];
 
     // JWT Secret fixo
-    const jwtSecret = process.env.JWT_SECRET || 'your_secret_key_here';
+    const jwtSecret = process.env.JWT_SECRET || "your_secret_key_here";
 
     // Verificar e decodificar o token
     jwt.verify(token, jwtSecret, (err, decoded) => {
