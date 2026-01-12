@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: API MeuBolso - Serverless Application
 
@@ -18,16 +18,11 @@ Parameters:
     Type: String
     Description: URL do projeto Supabase
     NoEcho: false
-  
+
   SupabaseAnonKey:
     Type: String
     Description: Chave anônima do Supabase
     NoEcho: true
-  
-  DomainName:
-    Type: String
-    Description: Nome do domínio customizado
-    Default: api.meubolso.com
 
 Resources:
   MeuBolsoApi:
@@ -38,11 +33,6 @@ Resources:
         AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
         AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
         AllowOrigin: "'*'"
-      Domain:
-        DomainName: !Ref DomainName
-        CertificateArn: !Ref ApiCertificate
-        Route53:
-          HostedZoneId: !Ref HostedZoneId
 
   MeuBolsoFunction:
     Type: AWS::Serverless::Function
@@ -67,33 +57,15 @@ Resources:
             Path: /{proxy+}
             Method: ANY
 
-  ApiCertificate:
-    Type: AWS::CertificateManager::Certificate
-    Properties:
-      DomainName: !Ref DomainName
-      ValidationMethod: DNS
-      DomainValidationOptions:
-        - DomainName: !Ref DomainName
-          HostedZoneId: !Ref HostedZoneId
-
-  HostedZoneId:
-    Type: String
-    Description: ID da Hosted Zone do Route53 para o domínio
-    Default: Z0123456789ABCDEFGHIJ
-
 Outputs:
   ApiUrl:
     Description: URL da API no API Gateway
     Value: !Sub "https://${MeuBolsoApi}.execute-api.${AWS::Region}.amazonaws.com/prod/"
-  
-  CustomDomainUrl:
-    Description: URL customizada da API
-    Value: !Sub "https://${DomainName}/"
-  
+
   FunctionArn:
     Description: ARN da função Lambda
     Value: !GetAtt MeuBolsoFunction.Arn
-  
+
   FunctionName:
     Description: Nome da função Lambda
     Value: !Ref MeuBolsoFunction
