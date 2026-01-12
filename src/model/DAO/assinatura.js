@@ -12,10 +12,8 @@ const supabase = require("../../config/supabase.js");
  */
 const getDataBrasilia = function () {
   const agora = new Date();
-  const offsetBrasilia = -3 * 60;
-  const offsetLocal = agora.getTimezoneOffset();
-  const diffMinutos = offsetLocal + offsetBrasilia;
-  const dataBrasilia = new Date(agora.getTime() - diffMinutos * 60 * 1000);
+  // Brasília está 3 horas ATRÁS de UTC (UTC-3)
+  const dataBrasilia = new Date(agora.getTime() - 3 * 60 * 60 * 1000);
   return dataBrasilia;
 };
 
