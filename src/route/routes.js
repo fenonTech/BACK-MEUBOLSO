@@ -93,6 +93,16 @@ router.post("/assinatura", bodyParserJson, async (request, response) => {
 // ROTA DE USUÁRIO (PROTEGIDA)
 // ==============================
 
+// Buscar dados do usuário logado (para tela de configurações)
+router.get("/usuarios/me", autenticar, async (request, response) => {
+  let user_id = request.usuarioId;
+
+  let resultado = await controllerUsuario.buscarUsuarioPorId(user_id);
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
 router.put(
   "/usuarios/perfil",
   autenticar,
