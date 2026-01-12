@@ -7,15 +7,14 @@
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 
-// Validar variáveis de ambiente
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-  throw new Error('SUPABASE_URL e SUPABASE_ANON_KEY devem estar configurados no .env');
-}
+// Configuração Supabase (valores fixos para produção)
+const supabaseUrl = process.env.SUPABASE_URL || 'https://xkwjhigcraahhmcjjzff.supabase.co';
+const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhrd2poaWdjcmFhaGhtY2pqemZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwNjgyODcsImV4cCI6MjA3NTY0NDI4N30.gwEqCWCwTGF1fIhN5ctBrpK8WwxGlB4eaa7CAbcc6lA';
 
 // Criar cliente do Supabase
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY,
+  supabaseUrl,
+  supabaseKey,
   {
     auth: {
       autoRefreshToken: true,

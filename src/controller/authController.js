@@ -249,8 +249,12 @@ const login = async function (dados, contentType) {
       email: usuario.email,
     };
 
-    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+    // JWT Secret fixo
+    const jwtSecret = process.env.JWT_SECRET || 'your_secret_key_here';
+    const jwtExpires = process.env.JWT_EXPIRES_IN || '7d';
+
+    const token = jwt.sign(tokenPayload, jwtSecret, {
+      expiresIn: jwtExpires,
     });
 
     // 5. Deletar código usado
