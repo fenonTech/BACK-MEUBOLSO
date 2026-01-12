@@ -115,12 +115,7 @@ const selectByIdUsuario = async function (id) {
   try {
     const { data, error } = await supabase
       .from("usuarios")
-      .select(
-        `
-                nome, telefone, email,
-              
-            `
-      )
+      .select("*")
       .eq("id", id)
       .single();
 
