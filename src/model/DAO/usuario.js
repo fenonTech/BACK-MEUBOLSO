@@ -117,9 +117,8 @@ const selectByIdUsuario = async function (id) {
       .from("usuarios")
       .select(
         `
-                *,
-                planos(id, nome, preco),
-                assinaturas(*)
+                nome, telefone, email,
+              
             `
       )
       .eq("id", id)
