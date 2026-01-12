@@ -153,20 +153,22 @@ const buscarAssinaturaPorUsuario = async function (usuarioCodigo) {
       return MESSAGE.ERROR_REQUIRED_FIELDS;
     }
 
+    // Buscar assinatura atual
+    const assinaturaAtual = await assinaturaDAO.selectByUsuarioAssinatura(
+      usuarioCodigo
+    );
+
     // Buscar histórico de assinaturas
     const historico = await historicoAssinaturaDAO.selectHistoricoByUsuario(
       usuarioCodigo
     );
 
-    if (historico) {
-      return {
-        status: MESSAGE.SUCCESS_REQUEST.status,
-        status_code: MESSAGE.SUCCESS_REQUEST.status_code,
-        historico: historico,
-      };
-    } else {
-      return MESSAGE.ERROR_NOT_FOUND;
-    }
+    return {
+      status: MESSAGE.SUCCESS_REQUEST.status,
+      status_code: MESSAGE.SUCCESS_REQUEST.status_code,
+      assinatura_atual: assinaturaAtual || null,
+      historico: historico || [],
+    };
   } catch (error) {
     console.error("Erro no controller buscarAssinaturaPorUsuario:", error);
     return MESSAGE.ERROR_INTERNAL_SERVER;
