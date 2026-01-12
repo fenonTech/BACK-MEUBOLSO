@@ -16,7 +16,7 @@ const getDataBrasilia = function () {
   const offsetBrasilia = -3 * 60; // -3 horas em minutos
   const offsetLocal = agora.getTimezoneOffset(); // Offset do servidor em minutos
   const diffMinutos = offsetLocal + offsetBrasilia;
-  
+
   const dataBrasilia = new Date(agora.getTime() - diffMinutos * 60 * 1000);
   return dataBrasilia;
 };
@@ -51,10 +51,12 @@ const armazenarCodigo = async function (
   try {
     // Usar horário de Brasília
     const expiraEm = adicionarMinutosBrasilia(5); // Código expira em 5 minutos
-    
+
     console.log("📅 [ARMAZENAR CÓDIGO] Data de expiração (Brasília):", {
       expiraEm: expiraEm.toISOString(),
-      expiraEmLocal: expiraEm.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+      expiraEmLocal: expiraEm.toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+      }),
     });
 
     // Verificar se já existe um código para este telefone
@@ -140,9 +142,13 @@ const validarCodigoTemp = async function (telefone, codigo) {
 
     console.log("⏰ [VALIDAR CÓDIGO] Verificação de expiração (Brasília):", {
       agoraBrasilia: agoraBrasilia.toISOString(),
-      agoraBrasiliaLocal: agoraBrasilia.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      agoraBrasiliaLocal: agoraBrasilia.toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+      }),
       expiraEm: expiraEm.toISOString(),
-      expiraEmLocal: expiraEm.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      expiraEmLocal: expiraEm.toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+      }),
       expirou: agoraBrasilia > expiraEm,
       diferençaMinutos: Math.floor((expiraEm - agoraBrasilia) / 1000 / 60),
     });

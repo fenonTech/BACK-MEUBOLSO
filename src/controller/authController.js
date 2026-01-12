@@ -19,7 +19,7 @@ const getDataBrasilia = function () {
   const offsetBrasilia = -3 * 60; // -3 horas em minutos
   const offsetLocal = agora.getTimezoneOffset(); // Offset do servidor em minutos
   const diffMinutos = offsetLocal + offsetBrasilia;
-  
+
   const dataBrasilia = new Date(agora.getTime() - diffMinutos * 60 * 1000);
   return dataBrasilia;
 };
