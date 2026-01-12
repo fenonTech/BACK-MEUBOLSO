@@ -11,6 +11,18 @@ const assinaturaDAO = require("../model/DAO/assinatura.js");
 const usuarioDAO = require("../model/DAO/usuario.js");
 
 /**
+ * HELPER: Obter data/hora atual no horário de Brasília (UTC-3)
+ */
+const getDataBrasilia = function () {
+  const agora = new Date();
+  const offsetBrasilia = -3 * 60;
+  const offsetLocal = agora.getTimezoneOffset();
+  const diffMinutos = offsetLocal + offsetBrasilia;
+  const dataBrasilia = new Date(agora.getTime() - diffMinutos * 60 * 1000);
+  return dataBrasilia;
+};
+
+/**
  * MIDDLEWARE: Verificar Token JWT
  */
 const verificarToken = async (request, response, next) => {
@@ -83,8 +95,8 @@ const verificarAssinatura = async (request, response, next) => {
       });
     }
 
-    // Verificar trial_end primeiro
-    const agora = new Date();
+    // Verificar trial_end primeiro (usando horário de Brasília)
+    const agora = getDataBrasilia();
     if (usuario.trial_end) {
       const trialEnd = new Date(usuario.trial_end);
       if (trialEnd > agora) {

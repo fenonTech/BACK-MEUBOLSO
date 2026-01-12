@@ -8,6 +8,29 @@
 const supabase = require("../../config/supabase.js");
 
 /**
+ * HELPER: Obter data/hora atual no horário de Brasília (UTC-3)
+ */
+const getDataBrasilia = function () {
+  const agora = new Date();
+  // Converter para horário de Brasília (UTC-3)
+  const offsetBrasilia = -3 * 60; // -3 horas em minutos
+  const offsetLocal = agora.getTimezoneOffset(); // Offset do servidor em minutos
+  const diffMinutos = offsetLocal + offsetBrasilia;
+  
+  const dataBrasilia = new Date(agora.getTime() - diffMinutos * 60 * 1000);
+  return dataBrasilia;
+};
+
+/**
+ * HELPER: Adicionar minutos a uma data considerando timezone de Brasília
+ */
+const adicionarMinutosBrasilia = function (minutos) {
+  const agora = getDataBrasilia();
+  agora.setMinutes(agora.getMinutes() + minutos);
+  return agora;
+};
+
+/**
  * GERAR CÓDIGO TEMPORÁRIO (6 dígitos)
  */
 const gerarCodigoTemp = function () {
@@ -26,8 +49,13 @@ const armazenarCodigo = async function (
   is_segundaValidacao = false
 ) {
   try {
-    const expiraEm = new Date();
-    expiraEm.setMinutes(expiraEm.getMinutes() + 5); // Código expira em 5 minutos
+    // Usar horário de Brasília
+    const expiraEm = adicionarMinutosBrasilia(5); // Código expira em 5 minutos
+    
+    console.log("📅 [ARMAZENAR CÓDIGO] Data de expiração (Brasília):", {
+      expiraEm: expiraEm.toISOString(),
+      expiraEmLocal: expiraEm.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+    });
 
     // Verificar se já existe um código para este telefone
     const { data: codigoExistente } = await supabase
@@ -106,18 +134,20 @@ const validarCodigoTemp = async function (telefone, codigo) {
       return false;
     }
 
-    // Verificar se o código expirou
-    const agora = new Date();
+    // Verificar se o código expirou (usando horário de Brasília)
+    const agoraBrasilia = getDataBrasilia();
     const expiraEm = new Date(data.expira_em);
 
-    console.log("⏰ [VALIDAR CÓDIGO] Verificação de expiração:", {
-      agora: agora.toISOString(),
+    console.log("⏰ [VALIDAR CÓDIGO] Verificação de expiração (Brasília):", {
+      agoraBrasilia: agoraBrasilia.toISOString(),
+      agoraBrasiliaLocal: agoraBrasilia.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
       expiraEm: expiraEm.toISOString(),
-      expirou: agora > expiraEm,
-      diferençaMinutos: Math.floor((expiraEm - agora) / 1000 / 60),
+      expiraEmLocal: expiraEm.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      expirou: agoraBrasilia > expiraEm,
+      diferençaMinutos: Math.floor((expiraEm - agoraBrasilia) / 1000 / 60),
     });
 
-    if (agora > expiraEm) {
+    if (agoraBrasilia > expiraEm) {
       console.log("❌ [VALIDAR CÓDIGO] Código expirado");
       return false;
     }

@@ -11,6 +11,20 @@ const usuarioDAO = require("../model/DAO/usuario.js");
 const assinaturaDAO = require("../model/DAO/assinatura.js");
 
 /**
+ * HELPER: Obter data/hora atual no horário de Brasília (UTC-3)
+ */
+const getDataBrasilia = function () {
+  const agora = new Date();
+  // Converter para horário de Brasília (UTC-3)
+  const offsetBrasilia = -3 * 60; // -3 horas em minutos
+  const offsetLocal = agora.getTimezoneOffset(); // Offset do servidor em minutos
+  const diffMinutos = offsetLocal + offsetBrasilia;
+  
+  const dataBrasilia = new Date(agora.getTime() - diffMinutos * 60 * 1000);
+  return dataBrasilia;
+};
+
+/**
  * ENVIAR CÓDIGO DE AUTENTICAÇÃO
  */
 const enviarCodigo = async function (dados, contentType) {
@@ -127,8 +141,8 @@ const validarAssinatura = async function (dados, contentType) {
       };
     }
 
-    // Verificar trial_end
-    const agora = new Date();
+    // Verificar trial_end (usando horário de Brasília)
+    const agora = getDataBrasilia();
     const trialEnd = new Date(usuario.trial_end);
 
     if (trialEnd > agora) {
@@ -212,12 +226,12 @@ const login = async function (dados, contentType) {
       };
     }
 
-    // 3. Verificar assinatura
+    // 3. Verificar assinatura (usando horário de Brasília)
     let assinaturaAtiva = false;
     let assinaturaTipo = null;
     let assinaturaValidade = null;
 
-    const agora = new Date();
+    const agora = getDataBrasilia();
     if (usuario.trial_end) {
       const trialEnd = new Date(usuario.trial_end);
       if (trialEnd > agora) {

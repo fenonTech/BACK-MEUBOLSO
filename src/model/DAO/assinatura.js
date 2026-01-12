@@ -8,6 +8,18 @@
 const supabase = require("../../config/supabase.js");
 
 /**
+ * HELPER: Obter data/hora atual no horário de Brasília (UTC-3)
+ */
+const getDataBrasilia = function () {
+  const agora = new Date();
+  const offsetBrasilia = -3 * 60;
+  const offsetLocal = agora.getTimezoneOffset();
+  const diffMinutos = offsetLocal + offsetBrasilia;
+  const dataBrasilia = new Date(agora.getTime() - diffMinutos * 60 * 1000);
+  return dataBrasilia;
+};
+
+/**
  * INSERIR ASSINATURA
  */
 const insertAssinatura = async function (dadosAssinatura) {
@@ -81,7 +93,7 @@ const cancelarAssinatura = async function (id) {
       .from("assinaturas")
       .update({
         is_cancelado: true,
-        dataCancelamento: new Date().toISOString(),
+        dataCancelamento: getDataBrasilia().toISOString(),
       })
       .eq("id", id)
       .select();
@@ -186,7 +198,7 @@ const verificarAssinaturaAtiva = async function (usuarioCodigo) {
 
     if (!assinatura) return false;
 
-    const hoje = new Date();
+    const hoje = getDataBrasilia();
     const prazo = new Date(assinatura.prazo);
 
     return !assinatura.is_cancelado && prazo >= hoje;
