@@ -2,7 +2,7 @@
  * Objetivo: Middleware de autenticação JWT com validação de assinatura
  * Data: 11/01/2026
  * Autor: Sistema
- * Versão: 1.0
+ * Versão: 2.0 - Otimizado com cache
  **************************************************************************/
 
 const jwt = require("jsonwebtoken");
@@ -10,12 +10,15 @@ const MESSAGE = require("../modulo/config.js");
 const assinaturaDAO = require("../model/DAO/assinatura.js");
 const usuarioDAO = require("../model/DAO/usuario.js");
 
+// Cache simples em memória (dura enquanto Lambda/Vercel está warm)
+const assinaturaCache = new Map();
+const CACHE_TTL = 30000; // 30 segundos
+
 /**
  * HELPER: Obter data/hora atual no horário de Brasília (UTC-3)
  */
 const getDataBrasilia = function () {
   const agora = new Date();
-  // Brasília está 3 horas ATRÁS de UTC (UTC-3)
   const dataBrasilia = new Date(agora.getTime() - 3 * 60 * 60 * 1000);
   return dataBrasilia;
 };
@@ -25,7 +28,6 @@ const getDataBrasilia = function () {
  */
 const verificarToken = async (request, response, next) => {
   try {
-    // Extrair token do header Authorization
     const authHeader = request.headers.authorization;
 
     if (!authHeader) {
@@ -36,7 +38,6 @@ const verificarToken = async (request, response, next) => {
       });
     }
 
-    // Formato esperado: "Bearer TOKEN"
     const parts = authHeader.split(" ");
 
     if (parts.length !== 2 || parts[0] !== "Bearer") {
@@ -76,11 +77,31 @@ const verificarToken = async (request, response, next) => {
 };
 
 /**
- * MIDDLEWARE: Verificar Assinatura Ativa
+ * MIDDLEWARE: Verificar Assinatura Ativa (com cache)
  */
 const verificarAssinatura = async (request, response, next) => {
   try {
     const usuarioId = request.usuarioId;
+    const agora = getDataBrasilia();
+
+    // Verificar cache
+    const cacheKey = `assinatura_${usuarioId}`;
+    const cached = assinaturaCache.get(cacheKey);
+
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      if (cached.valid) {
+        request.assinaturaTipo = cached.tipo;
+        request.assinaturaValida = cached.validade;
+        return next();
+      } else {
+        return response.status(403).json({
+          status: false,
+          status_code: 403,
+          message:
+            "Assinatura expirada ou inativa. Renove sua assinatura para continuar.",
+        });
+      }
+    }
 
     // Buscar dados do usuário
     const usuario = await usuarioDAO.selectByIdUsuario(usuarioId);
@@ -93,12 +114,17 @@ const verificarAssinatura = async (request, response, next) => {
       });
     }
 
-    // Verificar trial_end primeiro (usando horário de Brasília)
-    const agora = getDataBrasilia();
+    // Verificar trial_end primeiro
     if (usuario.trial_end) {
       const trialEnd = new Date(usuario.trial_end);
       if (trialEnd > agora) {
-        // Trial ativo
+        // Trial ativo - cachear
+        assinaturaCache.set(cacheKey, {
+          valid: true,
+          tipo: "trial",
+          validade: usuario.trial_end,
+          timestamp: Date.now(),
+        });
         request.assinaturaTipo = "trial";
         request.assinaturaValida = usuario.trial_end;
         return next();
@@ -114,12 +140,24 @@ const verificarAssinatura = async (request, response, next) => {
       const assinatura = await assinaturaDAO.selectByUsuarioAssinatura(
         usuarioId
       );
+      // Cachear assinatura paga
+      assinaturaCache.set(cacheKey, {
+        valid: true,
+        tipo: "paga",
+        validade: assinatura?.validade_fim,
+        timestamp: Date.now(),
+      });
       request.assinaturaTipo = "paga";
       request.assinaturaValida = assinatura?.validade_fim;
       return next();
     }
 
-    // Nenhuma assinatura ativa
+    // Nenhuma assinatura ativa - cachear resultado negativo
+    assinaturaCache.set(cacheKey, {
+      valid: false,
+      timestamp: Date.now(),
+    });
+
     return response.status(403).json({
       status: false,
       status_code: 403,
@@ -127,7 +165,6 @@ const verificarAssinatura = async (request, response, next) => {
         "Assinatura expirada ou inativa. Renove sua assinatura para continuar.",
     });
   } catch (error) {
-    console.error("Erro ao verificar assinatura:", error);
     return response.status(500).json(MESSAGE.ERROR_INTERNAL_SERVER);
   }
 };

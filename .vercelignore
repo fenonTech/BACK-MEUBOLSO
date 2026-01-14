@@ -1,0 +1,15 @@
+# Arquivos desnecessários para deploy
+
+node_modules
+.git
+.gitignore
+README.md
+POSTMAN_COLLECTION.md
+ENDPOINTS.md
+DEPLOY.md
+samconfig.toml
+samconfig.toml.example
+template.yaml
+meubolso-lambda.zip
+.env.local
+.env.development

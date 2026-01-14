@@ -2,19 +2,16 @@
  * Objetivo: Arquivo de rotas da API MeuBolso
  * Data: 10/01/2026
  * Autor: Israel
- * Versão: 1.0
+ * Versão: 2.0 - Otimizado (removido body-parser redundante)
  **************************************************************************/
 
 const express = require("express");
 const router = express.Router();
-const bodyParser = require("body-parser");
-
-const bodyParserJson = bodyParser.json();
 
 // Importar Middleware
 const { autenticar } = require("../middleware/authMiddleware.js");
 
-// Importar Controllers
+// Importar Controllers (carregados uma vez no início)
 const controllerAuth = require("../controller/authController.js");
 const controllerUsuario = require("../controller/usuario/controllerUsuario.js");
 const controllerTransacao = require("../controller/transacao/controllerTransacao.js");
@@ -24,7 +21,7 @@ const controllerAssinatura = require("../controller/assinatura/controllerAssinat
 // ROTAS DE AUTENTICAÇÃO
 // ==============================
 
-router.post("/auth/gerar-codigo", bodyParserJson, async (request, response) => {
+router.post("/auth/gerar-codigo", async (request, response) => {
   let contentType = request.headers["content-type"];
   let dadosBody = request.body;
 
@@ -34,22 +31,18 @@ router.post("/auth/gerar-codigo", bodyParserJson, async (request, response) => {
   response.json(resultado);
 });
 
-router.post(
-  "/auth/validar-codigo",
-  bodyParserJson,
-  async (request, response) => {
-    let contentType = request.headers["content-type"];
-    let dadosBody = request.body;
+router.post("/auth/validar-codigo", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
 
-    let resultado = await controllerAuth.validarCodigo(dadosBody, contentType);
+  let resultado = await controllerAuth.validarCodigo(dadosBody, contentType);
 
-    response.status(resultado.status_code || 200);
-    response.json(resultado);
-  }
-);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
 
 // Rota de LOGIN (valida código + assinatura + retorna JWT)
-router.post("/auth/login", bodyParserJson, async (request, response) => {
+router.post("/auth/login", async (request, response) => {
   let contentType = request.headers["content-type"];
   let dadosBody = request.body;
 
@@ -59,28 +52,24 @@ router.post("/auth/login", bodyParserJson, async (request, response) => {
   response.json(resultado);
 });
 
-router.post(
-  "/auth/validar-assinatura",
-  bodyParserJson,
-  async (request, response) => {
-    let contentType = request.headers["content-type"];
-    let dadosBody = request.body;
+router.post("/auth/validar-assinatura", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
 
-    let resultado = await controllerAuth.validarAssinatura(
-      dadosBody,
-      contentType
-    );
+  let resultado = await controllerAuth.validarAssinatura(
+    dadosBody,
+    contentType
+  );
 
-    response.status(resultado.status_code || 200);
-    response.json(resultado);
-  }
-);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
 
 // ==============================
 // WEBHOOK CAKTO (SEM AUTENTICAÇÃO)
 // ==============================
 
-router.post("/assinatura", bodyParserJson, async (request, response) => {
+router.post("/assinatura", async (request, response) => {
   let dadosBody = request.body;
 
   let resultado = await controllerAssinatura.webhookCakto(dadosBody);
@@ -106,7 +95,7 @@ router.get("/usuarios/me", autenticar, async (request, response) => {
 router.put(
   "/usuarios/perfil",
   autenticar,
-  bodyParserJson,
+
   async (request, response) => {
     let contentType = request.headers["content-type"];
     let user_id = request.usuarioId;
@@ -131,7 +120,7 @@ router.put(
 router.post(
   "/usuarios/incrementar-mensagens",
   autenticar,
-  bodyParserJson,
+
   async (request, response) => {
     // Pegar id do token automaticamente
     let id = request.usuarioId;
@@ -147,31 +136,26 @@ router.post(
 // ROTAS DE TRANSAÇÕES (PROTEGIDAS)
 // ==============================
 
-router.post(
-  "/transacoes",
-  autenticar,
-  bodyParserJson,
-  async (request, response) => {
-    let contentType = request.headers["content-type"];
-    let dadosBody = request.body;
+router.post("/transacoes", autenticar, async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
 
-    // Adicionar user_id automaticamente do token
-    dadosBody.user_id = request.usuarioId;
+  // Adicionar user_id automaticamente do token
+  dadosBody.user_id = request.usuarioId;
 
-    let resultado = await controllerTransacao.inserirTransacao(
-      dadosBody,
-      contentType
-    );
+  let resultado = await controllerTransacao.inserirTransacao(
+    dadosBody,
+    contentType
+  );
 
-    response.status(resultado.status_code || 200);
-    response.json(resultado);
-  }
-);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
 
 router.put(
   "/transacoes/:codigo",
   autenticar,
-  bodyParserJson,
+
   async (request, response) => {
     let contentType = request.headers["content-type"];
     let codigo = request.params.codigo;
@@ -193,7 +177,7 @@ router.put(
 router.delete(
   "/transacoes/:codigo",
   autenticar,
-  bodyParserJson,
+
   async (request, response) => {
     let codigo = request.params.codigo;
     let user_id = request.usuarioId;
@@ -207,7 +191,7 @@ router.delete(
 router.get(
   "/transacoes/:codigo",
   autenticar,
-  bodyParserJson,
+
   async (request, response) => {
     let codigo = request.params.codigo;
 
@@ -220,7 +204,7 @@ router.get(
 router.get(
   "/transacoes",
   autenticar,
-  bodyParserJson,
+
   async (request, response) => {
     let user_id = request.usuarioId;
     let filters = {
@@ -239,28 +223,23 @@ router.get(
 );
 
 // Rotas simplificadas
-router.get(
-  "/despesas",
-  autenticar,
-  bodyParserJson,
-  async (request, response) => {
-    let user_id = request.usuarioId;
-    let filters = {
-      mes: request.query.mes,
-      ano: request.query.ano,
-    };
+router.get("/despesas", autenticar, async (request, response) => {
+  let user_id = request.usuarioId;
+  let filters = {
+    mes: request.query.mes,
+    ano: request.query.ano,
+  };
 
-    let resultado = await controllerTransacao.listarDespesas(user_id, filters);
+  let resultado = await controllerTransacao.listarDespesas(user_id, filters);
 
-    response.status(resultado.status_code || 200);
-    response.json(resultado);
-  }
-);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
 
 router.get(
   "/entradas",
   autenticar,
-  bodyParserJson,
+
   async (request, response) => {
     let user_id = request.usuarioId;
     let filters = {
@@ -275,7 +254,7 @@ router.get(
   }
 );
 
-router.get("/resumo", autenticar, bodyParserJson, async (request, response) => {
+router.get("/resumo", autenticar, async (request, response) => {
   let user_id = request.usuarioId;
   let filters = {
     mes: request.query.mes,
@@ -292,31 +271,26 @@ router.get("/resumo", autenticar, bodyParserJson, async (request, response) => {
 // ROTAS DE ASSINATURAS (PROTEGIDAS)
 // ==============================
 
-router.post(
-  "/assinaturas",
-  autenticar,
-  bodyParserJson,
-  async (request, response) => {
-    let contentType = request.headers["content-type"];
-    let dadosBody = request.body;
+router.post("/assinaturas", autenticar, async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
 
-    // Adicionar usuario_codigo automaticamente do token
-    dadosBody.usuario_codigo = request.usuarioId;
+  // Adicionar usuario_codigo automaticamente do token
+  dadosBody.usuario_codigo = request.usuarioId;
 
-    let resultado = await controllerAssinatura.criarAssinatura(
-      dadosBody,
-      contentType
-    );
+  let resultado = await controllerAssinatura.criarAssinatura(
+    dadosBody,
+    contentType
+  );
 
-    response.status(resultado.status_code || 200);
-    response.json(resultado);
-  }
-);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
 
 router.get(
   "/assinaturas/minhas",
   autenticar,
-  bodyParserJson,
+
   async (request, response) => {
     // Pegar usuario_codigo do token automaticamente
     let usuarioCodigo = request.usuarioId;
