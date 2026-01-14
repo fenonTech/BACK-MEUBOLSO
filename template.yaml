@@ -5,14 +5,14 @@ Description: API MeuBolso - Serverless Application
 Globals:
   Function:
     Timeout: 30
-    MemorySize: 1024  # Aumentado para melhor CPU e performance de TLS/JSON
+    MemorySize: 1024 # Aumentado para melhor CPU e performance de TLS/JSON
     Runtime: nodejs20.x
     Environment:
       Variables:
         NODE_ENV: production
         SUPABASE_URL: !Ref SupabaseUrl
         SUPABASE_ANON_KEY: !Ref SupabaseAnonKey
-        AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1  # Habilita reuso de conexões HTTP
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1 # Habilita reuso de conexões HTTP
 
 Parameters:
   SupabaseUrl:

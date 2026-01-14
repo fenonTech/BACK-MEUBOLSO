@@ -21,16 +21,16 @@ const supabaseKey =
 const httpsAgent = new https.Agent({
   keepAlive: true,
   keepAliveMsecs: 60000, // Manter conexão por 60s
-  maxSockets: 50,         // Máximo de sockets simultâneos
-  maxFreeSockets: 10,     // Manter 10 sockets livres em pool
-  timeout: 30000,         // Timeout de 30s
+  maxSockets: 50, // Máximo de sockets simultâneos
+  maxFreeSockets: 10, // Manter 10 sockets livres em pool
+  timeout: 30000, // Timeout de 30s
 });
 
 // Criar cliente do Supabase com configurações otimizadas para Lambda
 const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     autoRefreshToken: false, // Desabilitar refresh automático em Lambda
-    persistSession: false,   // Não persistir sessão em Lambda
+    persistSession: false, // Não persistir sessão em Lambda
     detectSessionInUrl: false,
   },
   db: {
