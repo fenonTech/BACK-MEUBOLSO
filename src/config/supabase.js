@@ -18,15 +18,15 @@ const supabaseKey =
 const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     autoRefreshToken: false, // Desabilitar refresh automático em Lambda
-    persistSession: false,   // Não persistir sessão em Lambda
+    persistSession: false, // Não persistir sessão em Lambda
     detectSessionInUrl: false,
   },
   db: {
-    schema: 'public',
+    schema: "public",
   },
   global: {
     headers: {
-      'X-Client-Info': 'supabase-js-lambda',
+      "X-Client-Info": "supabase-js-lambda",
     },
   },
 });
