@@ -9,7 +9,8 @@
     "deploy": "sam deploy --guided",
     "build": "sam build",
     "local": "sam local start-api",
-    "package": "zip -r meubolso-lambda.zip . -x '*.git*' 'node_modules/nodemon/*'",
+    "package": "npm ci --production && powershell Compress-Archive -Path api,src,package.json,package-lock.json,node_modules -DestinationPath meubolso-lambda.zip -Force && npm install",
+    "package:linux": "npm ci --production && zip -r meubolso-lambda.zip api src package.json package-lock.json node_modules && npm install",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
