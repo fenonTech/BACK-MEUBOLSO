@@ -252,7 +252,7 @@ const login = async function (dados, contentType) {
     let planoNome = null;
 
     const agora = getDataBrasilia();
-    
+
     console.log("🔍 [LOGIN] Validando assinatura...");
     console.log("🔍 [LOGIN] Usuario plano_id:", usuario.plano_id);
     console.log("🔍 [LOGIN] Data atual (Brasília):", agora);
@@ -261,12 +261,12 @@ const login = async function (dados, contentType) {
       // Plano teste/gratuito - validar trial_end
       console.log("📋 [LOGIN] Validando plano gratuito/trial");
       console.log("📋 [LOGIN] Trial end:", usuario.trial_end);
-      
+
       if (usuario.trial_end) {
         const trialEnd = new Date(usuario.trial_end);
         console.log("📋 [LOGIN] Trial end (Date):", trialEnd);
         console.log("📋 [LOGIN] Trial ativo?", trialEnd > agora);
-        
+
         if (trialEnd > agora) {
           assinaturaAtiva = true;
           assinaturaTipo = "trial";
@@ -277,16 +277,19 @@ const login = async function (dados, contentType) {
     } else {
       // Plano pago - buscar último histórico de assinatura
       console.log("💳 [LOGIN] Validando plano pago - buscando histórico...");
-      
+
       const historicos = await historicoAssinaturaDAO.selectHistoricoByUsuario(
         usuario.id,
       );
 
-      console.log("💳 [LOGIN] Históricos encontrados:", historicos?.length || 0);
-      
+      console.log(
+        "💳 [LOGIN] Históricos encontrados:",
+        historicos?.length || 0,
+      );
+
       if (historicos && historicos.length > 0) {
         const ultimoHistorico = historicos[0]; // Já vem ordenado por data DESC
-        
+
         console.log("💳 [LOGIN] Último histórico:", {
           id: ultimoHistorico.id,
           nome_assinatura: ultimoHistorico.nome_assinatura,
@@ -297,12 +300,12 @@ const login = async function (dados, contentType) {
 
         // Verificar se não foi cancelado e se não expirou
         console.log("💳 [LOGIN] Cancelado?", ultimoHistorico.is_cancelado);
-        
+
         if (!ultimoHistorico.is_cancelado) {
           const prazo = new Date(ultimoHistorico.prazo);
           console.log("💳 [LOGIN] Prazo:", prazo);
           console.log("💳 [LOGIN] Prazo >= agora?", prazo >= agora);
-          
+
           if (prazo >= agora) {
             assinaturaAtiva = true;
             assinaturaTipo = "paga";
@@ -318,7 +321,7 @@ const login = async function (dados, contentType) {
         console.log("⚠️ [LOGIN] Nenhum histórico encontrado!");
       }
     }
-    
+
     console.log("✅ [LOGIN] Resultado validação:", {
       ativa: assinaturaAtiva,
       tipo: assinaturaTipo,
