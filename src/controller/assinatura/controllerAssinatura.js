@@ -535,7 +535,7 @@ async function handleSubscriptionCanceled(usuario, data, nowBrasilISO) {
       id: historicoCancelado.id,
       checkout_id: historicoCancelado.checkout_id,
       is_cancelado: historicoCancelado.is_cancelado,
-      dataCancelamento: historicoCancelado.dataCancelamento,
+      dataCancelamento: historicoCancelado.datacancelamento,
     });
   } else {
     console.error("❌ Erro ao cancelar histórico ou histórico não encontrado");

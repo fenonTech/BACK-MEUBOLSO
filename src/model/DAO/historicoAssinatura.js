@@ -65,7 +65,7 @@ const cancelarHistoricoAssinatura = async function (
       .from("historico_assinaturas")
       .update({
         is_cancelado: true,
-        dataCancelamento: dataCancelamento,
+        datacancelamento: dataCancelamento,
       })
       .eq("checkout_id", checkout_id)
       .eq("is_cancelado", false)
@@ -87,8 +87,8 @@ const selectHistoricoByUsuario = async function (usuarioCodigo) {
     const { data, error } = await supabase
       .from("historico_assinaturas")
       .select("*")
-      .eq("usuarioCodigo", usuarioCodigo)
-      .order("dataAssinatura", { ascending: false });
+      .eq("usuariocodigo", usuarioCodigo)
+      .order("dataassinatura", { ascending: false });
 
     if (error) throw error;
     return data;
