@@ -32,7 +32,7 @@ const mapearPlanoId = function (nomePlano) {
   if (nomeNormalizado.includes("inteligente")) return 3;
   if (nomeNormalizado.includes("visionario")) return 4;
 
-  return 1; // Plano gratuito por padrão
+  return null; // Retorna null se não identificar o plano
 };
 
 /**
@@ -374,6 +374,16 @@ async function handleSubscriptionCreated(usuario, data, nowBrasilISO) {
   const plano_id = mapearPlanoId(data.offer.name);
   console.log("📊 Plano ID mapeado:", plano_id);
 
+  // Validar se o plano foi identificado
+  if (!plano_id) {
+    console.error("❌ Plano não identificado. Nome recebido:", data.offer.name);
+    return {
+      status: false,
+      status_code: 400,
+      message: `Plano não identificado: ${data.offer.name}. Planos válidos: Essencial, Inteligente, Visionário`,
+    };
+  }
+
   // Criar registro no histórico
   const dadosHistorico = {
     usuarioCodigo: usuario.id,
@@ -438,6 +448,16 @@ async function handleSubscriptionRenewed(usuario, data, nowBrasilISO) {
   // Identificar plano_id pelo nome
   const plano_id = mapearPlanoId(data.offer.name);
   console.log("📊 Plano ID mapeado:", plano_id);
+
+  // Validar se o plano foi identificado
+  if (!plano_id) {
+    console.error("❌ Plano não identificado. Nome recebido:", data.offer.name);
+    return {
+      status: false,
+      status_code: 400,
+      message: `Plano não identificado: ${data.offer.name}. Planos válidos: Essencial, Inteligente, Visionário`,
+    };
+  }
 
   // Criar novo registro no histórico (renovação)
   const dadosHistorico = {

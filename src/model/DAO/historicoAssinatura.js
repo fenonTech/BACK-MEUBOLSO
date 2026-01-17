@@ -12,26 +12,43 @@ const supabase = require("../../config/supabase.js");
  */
 const insertHistoricoAssinatura = async function (dadosHistorico) {
   try {
+    console.log("🔵 [DAO] Iniciando inserção no histórico...");
+    console.log("🔵 [DAO] Dados recebidos:", dadosHistorico);
+
     const insertData = {
-      usuarioCodigo: dadosHistorico.usuarioCodigo,
+      usuariocodigo: dadosHistorico.usuarioCodigo,
       checkout_id: dadosHistorico.checkout_id,
       nome_assinatura: dadosHistorico.nome_assinatura,
-      dataAssinatura: dadosHistorico.dataAssinatura,
+      dataassinatura: dadosHistorico.dataAssinatura,
       prazo: dadosHistorico.prazo,
       plano_id_cakto: dadosHistorico.plano_id_cakto,
       plano_id: dadosHistorico.plano_id,
       is_cancelado: dadosHistorico.is_cancelado || false,
     };
 
+    console.log("🔵 [DAO] Dados formatados para insert:", insertData);
+
     const { data, error } = await supabase
       .from("historico_assinaturas")
       .insert([insertData])
       .select();
 
-    if (error) throw error;
+    if (error) {
+      console.error("❌ [DAO] Erro do Supabase:", error);
+      console.error("❌ [DAO] Detalhes do erro:", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+      throw error;
+    }
+
+    console.log("✅ [DAO] Histórico inserido com sucesso:", data[0]);
     return data[0];
   } catch (error) {
-    console.error("Erro ao inserir histórico de assinatura:", error);
+    console.error("❌ [DAO] Erro ao inserir histórico de assinatura:", error);
+    console.error("❌ [DAO] Stack:", error.stack);
     return false;
   }
 };
