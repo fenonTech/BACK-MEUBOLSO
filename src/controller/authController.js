@@ -9,6 +9,7 @@ const MESSAGE = require("../modulo/config.js");
 const authDAO = require("../model/DAO/auth.js");
 const usuarioDAO = require("../model/DAO/usuario.js");
 const assinaturaDAO = require("../model/DAO/assinatura.js");
+const historicoAssinaturaDAO = require("../model/DAO/historicoAssinatura.js");
 
 /**
  * HELPER: Obter data/hora atual no horário de Brasília (UTC-3)
@@ -41,7 +42,7 @@ const enviarCodigo = async function (dados, contentType) {
     const codigoArmazenado = await authDAO.armazenarCodigo(
       dados.telefone,
       codigo,
-      dados.is_segundaValidacao || false
+      dados.is_segundaValidacao || false,
     );
 
     if (codigoArmazenado) {
@@ -80,7 +81,7 @@ const validarCodigo = async function (dados, contentType) {
 
     const codigoValido = await authDAO.validarCodigoTemp(
       dados.telefone,
-      dados.codigo
+      dados.codigo,
     );
 
     if (codigoValido) {
@@ -138,47 +139,68 @@ const validarAssinatura = async function (dados, contentType) {
       };
     }
 
-    // Verificar trial_end (usando horário de Brasília)
+    // Verificar assinatura baseado no plano_id (usando horário de Brasília)
     const agora = getDataBrasilia();
-    const trialEnd = new Date(usuario.trial_end);
 
-    if (trialEnd > agora) {
+    if (usuario.plano_id === 1) {
+      // Plano teste/gratuito - validar trial_end
+      if (usuario.trial_end) {
+        const trialEnd = new Date(usuario.trial_end);
+        if (trialEnd > agora) {
+          return {
+            status: MESSAGE.SUCCESS_REQUEST.status,
+            status_code: MESSAGE.SUCCESS_REQUEST.status_code,
+            message: "Período de trial ativo",
+            assinaturaAtiva: true,
+            tipo: "trial",
+            validade: usuario.trial_end,
+            plano: "Plano Gratuito",
+          };
+        }
+      }
+
+      // Trial expirado
       return {
         status: MESSAGE.SUCCESS_REQUEST.status,
         status_code: MESSAGE.SUCCESS_REQUEST.status_code,
-        message: "Período de trial ativo",
-        assinaturaAtiva: true,
-        tipo: "trial",
-        validade: usuario.trial_end,
+        message: "Período de trial expirado",
+        assinaturaAtiva: false,
       };
-    }
-
-    // Verificar assinatura paga
-    const assinaturaAtiva = await assinaturaDAO.verificarAssinaturaAtiva(
-      usuario.id
-    );
-
-    if (assinaturaAtiva) {
-      const assinatura = await assinaturaDAO.selectByUsuarioAssinatura(
-        usuario.id
+    } else {
+      // Plano pago - buscar último histórico de assinatura
+      const historicos = await historicoAssinaturaDAO.selectHistoricoByUsuario(
+        usuario.id,
       );
+
+      if (historicos && historicos.length > 0) {
+        const ultimoHistorico = historicos[0]; // Já vem ordenado por data DESC
+
+        // Verificar se não foi cancelado e se não expirou
+        if (!ultimoHistorico.is_cancelado) {
+          const prazo = new Date(ultimoHistorico.prazo);
+          if (prazo >= agora) {
+            return {
+              status: MESSAGE.SUCCESS_REQUEST.status,
+              status_code: MESSAGE.SUCCESS_REQUEST.status_code,
+              message: "Assinatura ativa",
+              assinaturaAtiva: true,
+              tipo: "paga",
+              validade: ultimoHistorico.prazo,
+              plano: ultimoHistorico.nome_assinatura,
+              historico: ultimoHistorico,
+            };
+          }
+        }
+      }
+
+      // Assinatura cancelada ou expirada
       return {
         status: MESSAGE.SUCCESS_REQUEST.status,
         status_code: MESSAGE.SUCCESS_REQUEST.status_code,
-        message: "Assinatura ativa",
-        assinaturaAtiva: true,
-        tipo: "paga",
-        assinatura: assinatura,
+        message: "Assinatura inativa ou expirada",
+        assinaturaAtiva: false,
       };
     }
-
-    // Nenhuma assinatura ativa
-    return {
-      status: MESSAGE.SUCCESS_REQUEST.status,
-      status_code: MESSAGE.SUCCESS_REQUEST.status_code,
-      message: "Assinatura inativa ou expirada",
-      assinaturaAtiva: false,
-    };
   } catch (error) {
     console.error("Erro no controller validarAssinatura:", error);
     return MESSAGE.ERROR_INTERNAL_SERVER;
@@ -201,7 +223,7 @@ const login = async function (dados, contentType) {
     // 1. Validar código temporário
     const codigoValido = await authDAO.validarCodigoTemp(
       dados.telefone,
-      dados.codigo
+      dados.codigo,
     );
 
     if (!codigoValido) {
@@ -223,32 +245,44 @@ const login = async function (dados, contentType) {
       };
     }
 
-    // 3. Verificar assinatura (usando horário de Brasília)
+    // 3. Verificar assinatura baseado no plano_id (usando horário de Brasília)
     let assinaturaAtiva = false;
     let assinaturaTipo = null;
     let assinaturaValidade = null;
+    let planoNome = null;
 
     const agora = getDataBrasilia();
-    if (usuario.trial_end) {
-      const trialEnd = new Date(usuario.trial_end);
-      if (trialEnd > agora) {
-        assinaturaAtiva = true;
-        assinaturaTipo = "trial";
-        assinaturaValidade = usuario.trial_end;
-      }
-    }
 
-    if (!assinaturaAtiva) {
-      const assinaturaPaga = await assinaturaDAO.verificarAssinaturaAtiva(
-        usuario.id
+    if (usuario.plano_id === 1) {
+      // Plano teste/gratuito - validar trial_end
+      if (usuario.trial_end) {
+        const trialEnd = new Date(usuario.trial_end);
+        if (trialEnd > agora) {
+          assinaturaAtiva = true;
+          assinaturaTipo = "trial";
+          assinaturaValidade = usuario.trial_end;
+          planoNome = "Plano Gratuito";
+        }
+      }
+    } else {
+      // Plano pago - buscar último histórico de assinatura
+      const historicos = await historicoAssinaturaDAO.selectHistoricoByUsuario(
+        usuario.id,
       );
-      if (assinaturaPaga) {
-        const assinatura = await assinaturaDAO.selectByUsuarioAssinatura(
-          usuario.id
-        );
-        assinaturaAtiva = true;
-        assinaturaTipo = "paga";
-        assinaturaValidade = assinatura?.validade_fim;
+
+      if (historicos && historicos.length > 0) {
+        const ultimoHistorico = historicos[0]; // Já vem ordenado por data DESC
+
+        // Verificar se não foi cancelado e se não expirou
+        if (!ultimoHistorico.is_cancelado) {
+          const prazo = new Date(ultimoHistorico.prazo);
+          if (prazo >= agora) {
+            assinaturaAtiva = true;
+            assinaturaTipo = "paga";
+            assinaturaValidade = ultimoHistorico.prazo;
+            planoNome = ultimoHistorico.nome_assinatura;
+          }
+        }
       }
     }
 
@@ -291,6 +325,7 @@ const login = async function (dados, contentType) {
         ativa: assinaturaAtiva,
         tipo: assinaturaTipo,
         validade: assinaturaValidade,
+        plano: planoNome,
       },
     };
   } catch (error) {

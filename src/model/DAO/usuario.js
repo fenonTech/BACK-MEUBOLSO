@@ -12,6 +12,11 @@ const supabase = require("../../config/supabase.js");
  */
 const insertUsuario = async function (dadosUsuario) {
   try {
+    // Calcular trial_end: 5 dias a partir de agora (horário de Brasília)
+    const agora = new Date();
+    const dataBrasilia = new Date(agora.getTime() - 3 * 60 * 60 * 1000);
+    const trialEnd = new Date(dataBrasilia.getTime() + 5 * 24 * 60 * 60 * 1000);
+
     const { data, error } = await supabase
       .from("usuarios")
       .insert([
@@ -20,9 +25,10 @@ const insertUsuario = async function (dadosUsuario) {
           telefone: dadosUsuario.telefone,
           email: dadosUsuario.email || null,
           mensagens: dadosUsuario.mensagens || 0,
-          plano_id: dadosUsuario.plano_id || 1,
-          status_plano: dadosUsuario.status_plano || "plano gratuito",
+          plano_id: 1, // Sempre plano gratuito ao criar
+          status_plano: "plano gratuito",
           renda_mensal: dadosUsuario.renda_mensal || null,
+          trial_end: trialEnd.toISOString(),
         },
       ])
       .select();
@@ -96,7 +102,7 @@ const selectAllUsuarios = async function () {
         `
                 *,
                 planos(id, nome, preco)
-            `
+            `,
       )
       .order("created_at", { ascending: false });
 
@@ -138,7 +144,7 @@ const selectByTelefoneUsuario = async function (telefone) {
         `
                 id,nome, telefone,
                 assinaturas(plano_name_cakto,prazo)
-            `
+            `,
       )
       .eq("telefone", telefone)
       .single();

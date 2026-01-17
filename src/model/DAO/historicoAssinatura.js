@@ -19,6 +19,7 @@ const insertHistoricoAssinatura = async function (dadosHistorico) {
       dataAssinatura: dadosHistorico.dataAssinatura,
       prazo: dadosHistorico.prazo,
       plano_id_cakto: dadosHistorico.plano_id_cakto,
+      plano_id: dadosHistorico.plano_id,
       is_cancelado: dadosHistorico.is_cancelado || false,
     };
 
@@ -40,7 +41,7 @@ const insertHistoricoAssinatura = async function (dadosHistorico) {
  */
 const cancelarHistoricoAssinatura = async function (
   checkout_id,
-  dataCancelamento
+  dataCancelamento,
 ) {
   try {
     const { data, error } = await supabase

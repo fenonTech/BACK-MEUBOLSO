@@ -10,6 +10,32 @@ const usuarioDAO = require("../../model/DAO/usuario.js");
 const historicoAssinaturaDAO = require("../../model/DAO/historicoAssinatura.js");
 
 /**
+ * HELPER: Normalizar texto (remover acentos e converter para minúsculo)
+ */
+const normalizarTexto = function (texto) {
+  return texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+};
+
+/**
+ * HELPER: Mapear nome do plano para plano_id
+ * Essencial = 2
+ * Inteligente = 3
+ * Visionário = 4
+ */
+const mapearPlanoId = function (nomePlano) {
+  const nomeNormalizado = normalizarTexto(nomePlano);
+
+  if (nomeNormalizado.includes("essencial")) return 2;
+  if (nomeNormalizado.includes("inteligente")) return 3;
+  if (nomeNormalizado.includes("visionario")) return 4;
+
+  return 1; // Plano gratuito por padrão
+};
+
+/**
  * CRIAR ASSINATURA
  */
 const criarAssinatura = async function (assinatura, contentType) {
@@ -29,7 +55,7 @@ const criarAssinatura = async function (assinatura, contentType) {
 
     // Verificar se o usuário existe
     const usuario = await usuarioDAO.selectByIdUsuario(
-      assinatura.usuarioCodigo
+      assinatura.usuarioCodigo,
     );
     if (!usuario) {
       return {
@@ -72,7 +98,7 @@ const atualizarAssinatura = async function (id, assinatura, contentType) {
 
     const assinaturaAtualizada = await assinaturaDAO.updateAssinatura(
       id,
-      assinatura
+      assinatura,
     );
 
     if (assinaturaAtualizada) {
@@ -154,14 +180,12 @@ const buscarAssinaturaPorUsuario = async function (usuarioCodigo) {
     }
 
     // Buscar assinatura atual
-    const assinaturaAtual = await assinaturaDAO.selectByUsuarioAssinatura(
-      usuarioCodigo
-    );
+    const assinaturaAtual =
+      await assinaturaDAO.selectByUsuarioAssinatura(usuarioCodigo);
 
     // Buscar histórico de assinaturas
-    const historico = await historicoAssinaturaDAO.selectHistoricoByUsuario(
-      usuarioCodigo
-    );
+    const historico =
+      await historicoAssinaturaDAO.selectHistoricoByUsuario(usuarioCodigo);
 
     return {
       status: MESSAGE.SUCCESS_REQUEST.status,
@@ -304,34 +328,8 @@ const webhookCakto = async function (payload) {
  * Handler: subscription_created
  */
 async function handleSubscriptionCreated(usuario, data, nowBrasilISO) {
-  // Buscar assinatura existente
-  const assinaturaExistente = await assinaturaDAO.selectByUsuarioAssinatura(
-    usuario.id
-  );
-
-  const dadosAssinatura = {
-    prazo: data.subscription.next_payment_date,
-    plano_id_cakto: data.offer.id,
-    plano_name_cakto: data.offer.name,
-    subscription_id_cakto: data.subscription.id,
-    is_cancelado: false,
-  };
-
-  let assinatura;
-
-  if (!assinaturaExistente) {
-    // Criar nova assinatura
-    dadosAssinatura.usuarioCodigo = usuario.id;
-    dadosAssinatura.created_at = nowBrasilISO();
-
-    assinatura = await assinaturaDAO.insertAssinatura(dadosAssinatura);
-  } else {
-    // Reativar assinatura existente
-    assinatura = await assinaturaDAO.updateAssinatura(
-      assinaturaExistente.id,
-      dadosAssinatura
-    );
-  }
+  // Identificar plano_id pelo nome
+  const plano_id = mapearPlanoId(data.offer.name);
 
   // Criar registro no histórico
   const dadosHistorico = {
@@ -341,18 +339,24 @@ async function handleSubscriptionCreated(usuario, data, nowBrasilISO) {
     dataAssinatura: nowBrasilISO(),
     prazo: data.subscription.next_payment_date,
     plano_id_cakto: data.offer.id,
+    plano_id: plano_id,
     is_cancelado: false,
   };
 
-  await historicoAssinaturaDAO.insertHistoricoAssinatura(dadosHistorico);
+  const historico =
+    await historicoAssinaturaDAO.insertHistoricoAssinatura(dadosHistorico);
+
+  // Atualizar plano_id do usuário
+  await usuarioDAO.updateUsuario(usuario.id, {
+    plano_id: plano_id,
+    status_plano: data.offer.name,
+  });
 
   return {
     status: true,
-    status_code: !assinaturaExistente ? 201 : 200,
-    message: !assinaturaExistente
-      ? "Assinatura criada com sucesso"
-      : "Assinatura reativada com sucesso",
-    assinatura: assinatura,
+    status_code: 201,
+    message: "Assinatura criada com sucesso",
+    historico: historico,
   };
 }
 
@@ -360,28 +364,8 @@ async function handleSubscriptionCreated(usuario, data, nowBrasilISO) {
  * Handler: subscription_renewed
  */
 async function handleSubscriptionRenewed(usuario, data, nowBrasilISO) {
-  const assinatura = await assinaturaDAO.selectByUsuarioAssinatura(usuario.id);
-
-  if (!assinatura) {
-    return {
-      status: false,
-      status_code: 404,
-      message: "Assinatura não encontrada",
-    };
-  }
-
-  const dadosAtualizados = {
-    prazo: data.subscription.next_payment_date,
-    plano_id_cakto: data.offer.id,
-    plano_name_cakto: data.offer.name,
-    subscription_id_cakto: data.subscription.id,
-    is_cancelado: false,
-  };
-
-  const assinaturaAtualizada = await assinaturaDAO.updateAssinatura(
-    assinatura.id,
-    dadosAtualizados
-  );
+  // Identificar plano_id pelo nome
+  const plano_id = mapearPlanoId(data.offer.name);
 
   // Criar novo registro no histórico (renovação)
   const dadosHistorico = {
@@ -391,16 +375,24 @@ async function handleSubscriptionRenewed(usuario, data, nowBrasilISO) {
     dataAssinatura: nowBrasilISO(),
     prazo: data.subscription.next_payment_date,
     plano_id_cakto: data.offer.id,
+    plano_id: plano_id,
     is_cancelado: false,
   };
 
-  await historicoAssinaturaDAO.insertHistoricoAssinatura(dadosHistorico);
+  const historico =
+    await historicoAssinaturaDAO.insertHistoricoAssinatura(dadosHistorico);
+
+  // Atualizar plano_id do usuário
+  await usuarioDAO.updateUsuario(usuario.id, {
+    plano_id: plano_id,
+    status_plano: data.offer.name,
+  });
 
   return {
     status: true,
     status_code: 200,
     message: "Assinatura renovada com sucesso",
-    assinatura: assinaturaAtualizada,
+    historico: historico,
   };
 }
 
@@ -408,38 +400,19 @@ async function handleSubscriptionRenewed(usuario, data, nowBrasilISO) {
  * Handler: subscription_canceled
  */
 async function handleSubscriptionCanceled(usuario, data, nowBrasilISO) {
-  const assinatura = await assinaturaDAO.selectByUsuarioAssinatura(usuario.id);
-
-  if (!assinatura) {
-    return {
-      status: false,
-      status_code: 404,
-      message: "Assinatura não encontrada",
-    };
-  }
-
-  const dadosCancelamento = {
-    is_cancelado: true,
-    dataCancelamento: nowBrasilISO(),
-  };
-
-  const assinaturaCancelada = await assinaturaDAO.updateAssinatura(
-    assinatura.id,
-    dadosCancelamento
-  );
-
   // Cancelar apenas o registro específico no histórico (pelo checkout_id)
   const checkout_id = data.subscription.id;
-  await historicoAssinaturaDAO.cancelarHistoricoAssinatura(
-    checkout_id,
-    nowBrasilISO()
-  );
+  const historicoCancelado =
+    await historicoAssinaturaDAO.cancelarHistoricoAssinatura(
+      checkout_id,
+      nowBrasilISO(),
+    );
 
   return {
     status: true,
     status_code: 200,
     message: "Assinatura cancelada com sucesso",
-    assinatura: assinaturaCancelada,
+    historico: historicoCancelado,
   };
 }
 
