@@ -205,14 +205,15 @@ const verificarAssinaturaAtiva = async function (usuarioCodigo) {
     }
 
     // Buscar via histórico
-    const historicos = await historicoAssinaturaDAO.selectHistoricoByUsuario(usuarioCodigo);
-    
+    const historicos =
+      await historicoAssinaturaDAO.selectHistoricoByUsuario(usuarioCodigo);
+
     if (historicos && historicos.length > 0) {
       const ultimoHistorico = historicos[0];
       const agora = new Date();
       const prazo = new Date(ultimoHistorico.prazo);
       const ativa = !ultimoHistorico.is_cancelado && prazo >= agora;
-      
+
       return {
         status: MESSAGE.SUCCESS_REQUEST.status,
         status_code: MESSAGE.SUCCESS_REQUEST.status_code,
