@@ -7,8 +7,8 @@
 
 const jwt = require("jsonwebtoken");
 const MESSAGE = require("../modulo/config.js");
-const assinaturaDAO = require("../model/DAO/assinatura.js");
 const usuarioDAO = require("../model/DAO/usuario.js");
+const historicoAssinaturaDAO = require("../model/DAO/historicoAssinatura.js");
 
 // Cache simples em memória (dura enquanto Lambda/Vercel está warm)
 const assinaturaCache = new Map();
@@ -114,8 +114,8 @@ const verificarAssinatura = async (request, response, next) => {
       });
     }
 
-    // Verificar trial_end primeiro
-    if (usuario.trial_end) {
+    // Verificar trial_end primeiro (plano_id = 1)
+    if (usuario.plano_id === 1 && usuario.trial_end) {
       const trialEnd = new Date(usuario.trial_end);
       if (trialEnd > agora) {
         // Trial ativo - cachear
@@ -131,25 +131,32 @@ const verificarAssinatura = async (request, response, next) => {
       }
     }
 
-    // Verificar assinatura paga
-    const assinaturaAtiva = await assinaturaDAO.verificarAssinaturaAtiva(
-      usuarioId
-    );
-
-    if (assinaturaAtiva) {
-      const assinatura = await assinaturaDAO.selectByUsuarioAssinatura(
+    // Verificar assinatura paga via histórico (plano_id != 1)
+    if (usuario.plano_id && usuario.plano_id !== 1) {
+      const historicos = await historicoAssinaturaDAO.selectHistoricoByUsuario(
         usuarioId
       );
-      // Cachear assinatura paga
-      assinaturaCache.set(cacheKey, {
-        valid: true,
-        tipo: "paga",
-        validade: assinatura?.validade_fim,
-        timestamp: Date.now(),
-      });
-      request.assinaturaTipo = "paga";
-      request.assinaturaValida = assinatura?.validade_fim;
-      return next();
+
+      if (historicos && historicos.length > 0) {
+        const ultimoHistorico = historicos[0]; // Já vem ordenado por data DESC
+
+        // Verificar se não foi cancelado e se não expirou
+        if (!ultimoHistorico.is_cancelado) {
+          const prazo = new Date(ultimoHistorico.prazo);
+          if (prazo >= agora) {
+            // Assinatura ativa - cachear
+            assinaturaCache.set(cacheKey, {
+              valid: true,
+              tipo: "paga",
+              validade: ultimoHistorico.prazo,
+              timestamp: Date.now(),
+            });
+            request.assinaturaTipo = "paga";
+            request.assinaturaValida = ultimoHistorico.prazo;
+            return next();
+          }
+        }
+      }
     }
 
     // Nenhuma assinatura ativa - cachear resultado negativo
