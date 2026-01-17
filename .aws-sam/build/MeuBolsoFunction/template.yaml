@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: API MeuBolso - Serverless Application
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 1024 # Aumentado para melhor CPU e performance de TLS/JSON
+    Runtime: nodejs20.x
+    Environment:
+      Variables:
+        NODE_ENV: production
+        SUPABASE_URL: !Ref SupabaseUrl
+        SUPABASE_ANON_KEY: !Ref SupabaseAnonKey
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1 # Habilita reuso de conexões HTTP
+
+Parameters:
+  SupabaseUrl:
+    Type: String
+    Description: URL do projeto Supabase
+    NoEcho: false
+
+  SupabaseAnonKey:
+    Type: String
+    Description: Chave anônima do Supabase
+    NoEcho: true
+
+Resources:
+  MeuBolsoApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+
+  MeuBolsoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: meubolso-api
+      CodeUri: ./
+      Handler: src/lambda.handler
+      Description: API MeuBolso - Gerenciamento Financeiro
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        ProxyApiRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MeuBolsoApi
+            Path: /
+            Method: ANY
+        ProxyApiGreedy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MeuBolsoApi
+            Path: /{proxy+}
+            Method: ANY
+
+Outputs:
+  ApiUrl:
+    Description: URL da API no API Gateway
+    Value: !Sub "https://${MeuBolsoApi}.execute-api.${AWS::Region}.amazonaws.com/prod/"
+
+  FunctionArn:
+    Description: ARN da função Lambda
+    Value: !GetAtt MeuBolsoFunction.Arn
+
+  FunctionName:
+    Description: Nome da função Lambda
+    Value: !Ref MeuBolsoFunction

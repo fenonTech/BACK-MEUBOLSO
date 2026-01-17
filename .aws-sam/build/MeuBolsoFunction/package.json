@@ -6,9 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "build": "echo 'No build needed for Vercel'",
     "deploy": "sam deploy --guided",
-    "build:sam": "sam build",
+    "build": "sam build",
     "local": "sam local start-api",
     "package": "npm ci --production && powershell Compress-Archive -Path api,src,package.json,package-lock.json,node_modules -DestinationPath meubolso-lambda.zip -Force && npm install",
     "package:linux": "npm ci --production && zip -r meubolso-lambda.zip api src package.json package-lock.json node_modules && npm install",

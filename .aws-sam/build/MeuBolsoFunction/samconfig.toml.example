@@ -1,0 +1,24 @@
+# Arquivo para configuração de parâmetros do SAM
+# Copie este arquivo para samconfig.toml e preencha com seus valores
+
+version = 0.1
+
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "meubolso-api-stack"
+s3_bucket = "SEU-BUCKET-S3-AQUI"
+s3_prefix = "meubolso-api"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = [
+  "SupabaseUrl=https://SEU-PROJETO.supabase.co",
+  "SupabaseAnonKey=SUA-CHAVE-ANONIMA-AQUI",
+  "DomainName=api.meubolso.com",
+  "HostedZoneId=Z0123456789ABCDEFGHIJ"
+]
+confirm_changeset = true
+
+[default.build]
+[default.build.parameters]
+use_container = false

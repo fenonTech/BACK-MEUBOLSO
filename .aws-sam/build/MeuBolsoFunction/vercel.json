@@ -1,18 +1,29 @@
 {
   "version": 2,
   "regions": ["gru1"],
-  "buildCommand": "echo 'No build needed'",
-  "outputDirectory": ".",
   "functions": {
     "api/index.js": {
       "memory": 1024,
       "maxDuration": 10
     }
   },
-  "rewrites": [
+  "builds": [
     {
-      "source": "/(.*)",
-      "destination": "/api"
+      "src": "api/index.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/health",
+      "dest": "api/index.js",
+      "headers": {
+        "Cache-Control": "s-maxage=60, stale-while-revalidate"
+      }
+    },
+    {
+      "src": "/(.*)",
+      "dest": "api/index.js"
     }
   ],
   "headers": [
