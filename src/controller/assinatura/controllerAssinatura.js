@@ -251,10 +251,29 @@ const listarAssinaturas = async function () {
  */
 const webhookCakto = async function (payload) {
   try {
+    console.log("\n========== WEBHOOK CAKTO - INÍCIO ==========");
+    console.log("📦 Payload recebido:", JSON.stringify(payload, null, 2));
+
     const event = payload.event;
     const data = payload.data;
 
+    console.log("🔍 Evento:", event);
+    console.log("📋 Dados do cliente:", {
+      nome: data?.customer?.name,
+      telefone: data?.customer?.phone,
+      email: data?.customer?.email,
+    });
+    console.log("💳 Dados da oferta:", {
+      id: data?.offer?.id,
+      nome: data?.offer?.name,
+    });
+    console.log("📝 Dados da subscription:", {
+      id: data?.subscription?.id,
+      next_payment_date: data?.subscription?.next_payment_date,
+    });
+
     if (!event || !data) {
+      console.error("❌ Payload inválido - event ou data ausente");
       return {
         status: false,
         status_code: 400,
@@ -264,6 +283,7 @@ const webhookCakto = async function (payload) {
 
     // Formatar telefone com +
     const telefone = "+" + data.customer.phone;
+    console.log("📞 Telefone formatado:", telefone);
 
     // Função para obter data/hora de Brasília
     const nowBrasilISO = () => {
@@ -275,9 +295,11 @@ const webhookCakto = async function (payload) {
     };
 
     // 1. Buscar ou criar usuário
+    console.log("🔍 Buscando usuário pelo telefone:", telefone);
     let usuario = await usuarioDAO.selectByTelefoneUsuario(telefone);
 
     if (!usuario) {
+      console.log("👤 Usuário não encontrado. Criando novo usuário...");
       // Criar usuário
       const novoUsuario = await usuarioDAO.insertUsuario({
         nome: data.customer.name,
@@ -286,6 +308,7 @@ const webhookCakto = async function (payload) {
       });
 
       if (!novoUsuario) {
+        console.error("❌ Erro ao criar usuário");
         return {
           status: false,
           status_code: 500,
@@ -294,9 +317,22 @@ const webhookCakto = async function (payload) {
       }
 
       usuario = novoUsuario;
+      console.log("✅ Usuário criado com sucesso:", {
+        id: usuario.id,
+        nome: usuario.nome,
+        telefone: usuario.telefone,
+      });
+    } else {
+      console.log("✅ Usuário encontrado:", {
+        id: usuario.id,
+        nome: usuario.nome,
+        telefone: usuario.telefone,
+        plano_id: usuario.plano_id,
+      });
     }
 
     // 2. Processar evento
+    console.log("🔄 Processando evento:", event);
     switch (event) {
       case "subscription_created":
         return await handleSubscriptionCreated(usuario, data, nowBrasilISO);
@@ -308,6 +344,7 @@ const webhookCakto = async function (payload) {
         return await handleSubscriptionCanceled(usuario, data, nowBrasilISO);
 
       default:
+        console.error("❌ Evento desconhecido:", event);
         return {
           status: false,
           status_code: 400,
@@ -315,7 +352,8 @@ const webhookCakto = async function (payload) {
         };
     }
   } catch (error) {
-    console.error("Erro no webhook Cakto:", error);
+    console.error("❌ Erro no webhook Cakto:", error);
+    console.error("Stack trace:", error.stack);
     return {
       status: false,
       status_code: 500,
@@ -328,8 +366,13 @@ const webhookCakto = async function (payload) {
  * Handler: subscription_created
  */
 async function handleSubscriptionCreated(usuario, data, nowBrasilISO) {
+  console.log("\n✨ === SUBSCRIPTION_CREATED ===");
+  console.log("👤 Usuário ID:", usuario.id);
+  console.log("🎯 Nome da oferta:", data.offer.name);
+
   // Identificar plano_id pelo nome
   const plano_id = mapearPlanoId(data.offer.name);
+  console.log("📊 Plano ID mapeado:", plano_id);
 
   // Criar registro no histórico
   const dadosHistorico = {
@@ -343,15 +386,39 @@ async function handleSubscriptionCreated(usuario, data, nowBrasilISO) {
     is_cancelado: false,
   };
 
+  console.log("📝 Dados do histórico a inserir:", dadosHistorico);
+
   const historico =
     await historicoAssinaturaDAO.insertHistoricoAssinatura(dadosHistorico);
 
+  if (historico) {
+    console.log("✅ Histórico criado:", {
+      id: historico.id,
+      checkout_id: historico.checkout_id,
+      plano_id: historico.plano_id,
+    });
+  } else {
+    console.error("❌ Erro ao criar histórico");
+  }
+
   // Atualizar plano_id do usuário
-  await usuarioDAO.updateUsuario(usuario.id, {
+  console.log("🔄 Atualizando plano do usuário...");
+  const usuarioAtualizado = await usuarioDAO.updateUsuario(usuario.id, {
     plano_id: plano_id,
     status_plano: data.offer.name,
   });
 
+  if (usuarioAtualizado) {
+    console.log("✅ Usuário atualizado:", {
+      id: usuarioAtualizado.id,
+      plano_id: usuarioAtualizado.plano_id,
+      status_plano: usuarioAtualizado.status_plano,
+    });
+  } else {
+    console.error("❌ Erro ao atualizar usuário");
+  }
+
+  console.log("✅ SUBSCRIPTION_CREATED finalizado com sucesso\n");
   return {
     status: true,
     status_code: 201,
@@ -364,8 +431,13 @@ async function handleSubscriptionCreated(usuario, data, nowBrasilISO) {
  * Handler: subscription_renewed
  */
 async function handleSubscriptionRenewed(usuario, data, nowBrasilISO) {
+  console.log("\n🔄 === SUBSCRIPTION_RENEWED ===");
+  console.log("👤 Usuário ID:", usuario.id);
+  console.log("🎯 Nome da oferta:", data.offer.name);
+
   // Identificar plano_id pelo nome
   const plano_id = mapearPlanoId(data.offer.name);
+  console.log("📊 Plano ID mapeado:", plano_id);
 
   // Criar novo registro no histórico (renovação)
   const dadosHistorico = {
@@ -379,15 +451,39 @@ async function handleSubscriptionRenewed(usuario, data, nowBrasilISO) {
     is_cancelado: false,
   };
 
+  console.log("📝 Dados do histórico a inserir:", dadosHistorico);
+
   const historico =
     await historicoAssinaturaDAO.insertHistoricoAssinatura(dadosHistorico);
 
+  if (historico) {
+    console.log("✅ Histórico de renovação criado:", {
+      id: historico.id,
+      checkout_id: historico.checkout_id,
+      plano_id: historico.plano_id,
+    });
+  } else {
+    console.error("❌ Erro ao criar histórico de renovação");
+  }
+
   // Atualizar plano_id do usuário
-  await usuarioDAO.updateUsuario(usuario.id, {
+  console.log("🔄 Atualizando plano do usuário...");
+  const usuarioAtualizado = await usuarioDAO.updateUsuario(usuario.id, {
     plano_id: plano_id,
     status_plano: data.offer.name,
   });
 
+  if (usuarioAtualizado) {
+    console.log("✅ Usuário atualizado:", {
+      id: usuarioAtualizado.id,
+      plano_id: usuarioAtualizado.plano_id,
+      status_plano: usuarioAtualizado.status_plano,
+    });
+  } else {
+    console.error("❌ Erro ao atualizar usuário");
+  }
+
+  console.log("✅ SUBSCRIPTION_RENEWED finalizado com sucesso\n");
   return {
     status: true,
     status_code: 200,
@@ -400,14 +496,32 @@ async function handleSubscriptionRenewed(usuario, data, nowBrasilISO) {
  * Handler: subscription_canceled
  */
 async function handleSubscriptionCanceled(usuario, data, nowBrasilISO) {
+  console.log("\n❌ === SUBSCRIPTION_CANCELED ===");
+  console.log("👤 Usuário ID:", usuario.id);
+  console.log("🔑 Checkout ID:", data.subscription.id);
+
   // Cancelar apenas o registro específico no histórico (pelo checkout_id)
   const checkout_id = data.subscription.id;
+  console.log("🔄 Cancelando histórico com checkout_id:", checkout_id);
+
   const historicoCancelado =
     await historicoAssinaturaDAO.cancelarHistoricoAssinatura(
       checkout_id,
       nowBrasilISO(),
     );
 
+  if (historicoCancelado) {
+    console.log("✅ Histórico cancelado:", {
+      id: historicoCancelado.id,
+      checkout_id: historicoCancelado.checkout_id,
+      is_cancelado: historicoCancelado.is_cancelado,
+      dataCancelamento: historicoCancelado.dataCancelamento,
+    });
+  } else {
+    console.error("❌ Erro ao cancelar histórico ou histórico não encontrado");
+  }
+
+  console.log("✅ SUBSCRIPTION_CANCELED finalizado\n");
   return {
     status: true,
     status_code: 200,
