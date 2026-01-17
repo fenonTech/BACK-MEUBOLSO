@@ -5,7 +5,6 @@
  **************************************************************************/
 
 const MESSAGE = require("../../modulo/config.js");
-const assinaturaDAO = require("../../model/DAO/assinatura.js");
 const usuarioDAO = require("../../model/DAO/usuario.js");
 const historicoAssinaturaDAO = require("../../model/DAO/historicoAssinatura.js");
 
@@ -179,10 +178,6 @@ const buscarAssinaturaPorUsuario = async function (usuarioCodigo) {
       return MESSAGE.ERROR_REQUIRED_FIELDS;
     }
 
-    // Buscar assinatura atual
-    const assinaturaAtual =
-      await assinaturaDAO.selectByUsuarioAssinatura(usuarioCodigo);
-
     // Buscar histórico de assinaturas
     const historico =
       await historicoAssinaturaDAO.selectHistoricoByUsuario(usuarioCodigo);
@@ -190,7 +185,7 @@ const buscarAssinaturaPorUsuario = async function (usuarioCodigo) {
     return {
       status: MESSAGE.SUCCESS_REQUEST.status,
       status_code: MESSAGE.SUCCESS_REQUEST.status_code,
-      assinatura_atual: assinaturaAtual || null,
+      assinatura_atual: null, // Deprecated - mantido para compatibilidade
       historico: historico || [],
     };
   } catch (error) {
@@ -201,6 +196,7 @@ const buscarAssinaturaPorUsuario = async function (usuarioCodigo) {
 
 /**
  * VERIFICAR SE ASSINATURA ESTÁ ATIVA
+ * @deprecated - Use historicoAssinatura para validação
  */
 const verificarAssinaturaAtiva = async function (usuarioCodigo) {
   try {
@@ -208,12 +204,26 @@ const verificarAssinaturaAtiva = async function (usuarioCodigo) {
       return MESSAGE.ERROR_REQUIRED_FIELDS;
     }
 
-    const ativa = await assinaturaDAO.verificarAssinaturaAtiva(usuarioCodigo);
+    // Buscar via histórico
+    const historicos = await historicoAssinaturaDAO.selectHistoricoByUsuario(usuarioCodigo);
+    
+    if (historicos && historicos.length > 0) {
+      const ultimoHistorico = historicos[0];
+      const agora = new Date();
+      const prazo = new Date(ultimoHistorico.prazo);
+      const ativa = !ultimoHistorico.is_cancelado && prazo >= agora;
+      
+      return {
+        status: MESSAGE.SUCCESS_REQUEST.status,
+        status_code: MESSAGE.SUCCESS_REQUEST.status_code,
+        assinaturaAtiva: ativa,
+      };
+    }
 
     return {
       status: MESSAGE.SUCCESS_REQUEST.status,
       status_code: MESSAGE.SUCCESS_REQUEST.status_code,
-      assinaturaAtiva: ativa,
+      assinaturaAtiva: false,
     };
   } catch (error) {
     console.error("Erro no controller verificarAssinaturaAtiva:", error);
@@ -223,23 +233,15 @@ const verificarAssinaturaAtiva = async function (usuarioCodigo) {
 
 /**
  * LISTAR TODAS AS ASSINATURAS
+ * @deprecated - Agora usamos apenas historico_assinaturas
  */
 const listarAssinaturas = async function () {
   try {
-    const assinaturas = await assinaturaDAO.selectAllAssinaturas();
-
-    if (assinaturas && assinaturas.length > 0) {
-      return {
-        status: MESSAGE.SUCCESS_REQUEST.status,
-        status_code: MESSAGE.SUCCESS_REQUEST.status_code,
-        quantidade: assinaturas.length,
-        assinaturas: assinaturas,
-      };
-    } else if (assinaturas && assinaturas.length === 0) {
-      return MESSAGE.ERROR_NOT_FOUND;
-    } else {
-      return MESSAGE.ERROR_INTERNAL_SERVER_DB;
-    }
+    return {
+      status: false,
+      status_code: 410,
+      message: "Esta função foi descontinuada. Use o histórico de assinaturas.",
+    };
   } catch (error) {
     console.error("Erro no controller listarAssinaturas:", error);
     return MESSAGE.ERROR_INTERNAL_SERVER;

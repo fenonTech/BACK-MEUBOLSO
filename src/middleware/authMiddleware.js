@@ -133,9 +133,8 @@ const verificarAssinatura = async (request, response, next) => {
 
     // Verificar assinatura paga via histórico (plano_id != 1)
     if (usuario.plano_id && usuario.plano_id !== 1) {
-      const historicos = await historicoAssinaturaDAO.selectHistoricoByUsuario(
-        usuarioId
-      );
+      const historicos =
+        await historicoAssinaturaDAO.selectHistoricoByUsuario(usuarioId);
 
       if (historicos && historicos.length > 0) {
         const ultimoHistorico = historicos[0]; // Já vem ordenado por data DESC

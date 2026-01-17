@@ -8,7 +8,6 @@ const jwt = require("jsonwebtoken");
 const MESSAGE = require("../modulo/config.js");
 const authDAO = require("../model/DAO/auth.js");
 const usuarioDAO = require("../model/DAO/usuario.js");
-const assinaturaDAO = require("../model/DAO/assinatura.js");
 const historicoAssinaturaDAO = require("../model/DAO/historicoAssinatura.js");
 
 /**
