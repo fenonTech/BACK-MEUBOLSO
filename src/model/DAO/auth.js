@@ -28,12 +28,10 @@ const adicionarMinutosBrasilia = function (minutos) {
 };
 
 /**
- * GERAR CÓDIGO TEMPORÁRIO (6 dígitos)
+ * GERAR CÓDIGO TEMPORÁRIO (6 dígitos numéricos)
  */
 const gerarCodigoTemp = function () {
-  const codigo = Math.floor(Math.random() * 36 ** 6)
-    .toString(36)
-    .padStart(6, "0");
+  const codigo = Math.floor(100000 + Math.random() * 900000).toString();
   return codigo;
 };
 
@@ -43,7 +41,7 @@ const gerarCodigoTemp = function () {
 const armazenarCodigo = async function (
   telefone,
   codigo,
-  is_segundaValidacao = false
+  is_segundaValidacao = false,
 ) {
   try {
     // Usar horário de Brasília

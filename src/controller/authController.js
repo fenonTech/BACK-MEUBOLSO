@@ -296,7 +296,7 @@ const login = async function (dados, contentType) {
 
     // JWT Secret fixo
     const jwtSecret = process.env.JWT_SECRET || "your_secret_key_here";
-    const jwtExpires = process.env.JWT_EXPIRES_IN || "7d";
+    const jwtExpires = process.env.JWT_EXPIRES_IN || "1h";
 
     const token = jwt.sign(tokenPayload, jwtSecret, {
       expiresIn: jwtExpires,
