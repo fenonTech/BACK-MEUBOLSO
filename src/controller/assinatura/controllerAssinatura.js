@@ -179,14 +179,24 @@ const buscarAssinaturaPorUsuario = async function (usuarioCodigo) {
     }
 
     // Buscar histórico de assinaturas
-    const historico =
+    const todasAssinaturas =
       await historicoAssinaturaDAO.selectHistoricoByUsuario(usuarioCodigo);
+
+    // A assinatura atual é sempre a última (mais recente) assinatura
+    const assinaturaAtual = todasAssinaturas && todasAssinaturas.length > 0 
+      ? todasAssinaturas[0] 
+      : null;
+
+    // O histórico contém todas as assinaturas exceto a atual
+    const historico = todasAssinaturas && todasAssinaturas.length > 1
+      ? todasAssinaturas.slice(1)
+      : [];
 
     return {
       status: MESSAGE.SUCCESS_REQUEST.status,
       status_code: MESSAGE.SUCCESS_REQUEST.status_code,
-      assinatura_atual: null, // Deprecated - mantido para compatibilidade
-      historico: historico || [],
+      assinatura_atual: assinaturaAtual,
+      historico: historico,
     };
   } catch (error) {
     console.error("Erro no controller buscarAssinaturaPorUsuario:", error);
