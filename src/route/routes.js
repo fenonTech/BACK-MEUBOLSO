@@ -52,13 +52,12 @@ router.post("/auth/login", async (request, response) => {
   response.json(resultado);
 });
 
-router.get("/auth/validar-assinatura", async (request, response) => {
-  let contentType = request.headers["content-type"];
-  let dadosBody = request.body;
+router.get("/auth/validar-assinatura/:telefone", async (request, response) => {
+  let telefone = request.params.telefone;
 
   let resultado = await controllerAuth.validarAssinatura(
-    dadosBody,
-    contentType,
+    { telefone },
+    "application/json",
   );
 
   response.status(resultado.status_code || 200);
