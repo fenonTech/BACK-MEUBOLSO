@@ -140,30 +140,42 @@ const validarAssinatura = async function (dados, contentType) {
 
     // Verificar assinatura baseado no plano_id (usando horário de Brasília)
     const agora = getDataBrasilia();
+    // Zerar horas para comparar apenas datas (UTC)
+    const hojeInicio = new Date(
+      Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate()),
+    );
+
+    console.log("=== DEBUG VALIDAR ASSINATURA ===");
+    console.log("Telefone:", dados.telefone);
+    console.log("Plano ID:", usuario.plano_id);
+    console.log("Hoje (Brasília):", hojeInicio);
 
     if (usuario.plano_id === 1) {
       // Plano teste/gratuito - validar trial_end
       if (usuario.trial_end) {
         const trialEnd = new Date(usuario.trial_end);
-        if (trialEnd > agora) {
-          return {
-            status: MESSAGE.SUCCESS_REQUEST.status,
-            status_code: MESSAGE.SUCCESS_REQUEST.status_code,
-            message: "Período de trial ativo",
-            assinaturaAtiva: true,
-            tipo: "trial",
-            validade: usuario.trial_end,
-            plano: "Plano Gratuito",
-          };
-        }
+        const trialEndDia = new Date(
+          Date.UTC(
+            trialEnd.getUTCFullYear(),
+            trialEnd.getUTCMonth(),
+            trialEnd.getUTCDate(),
+          ),
+        );
+        const expirado = trialEndDia < hojeInicio;
+
+        console.log("Trial End:", usuario.trial_end);
+        console.log("Trial End Dia:", trialEndDia);
+        console.log("Expirado?", expirado);
+
+        return {
+          expirado: expirado,
+        };
       }
 
-      // Trial expirado
+      // Trial não configurado - considerar como expirado
+      console.log("Trial não configurado");
       return {
-        status: MESSAGE.SUCCESS_REQUEST.status,
-        status_code: MESSAGE.SUCCESS_REQUEST.status_code,
-        message: "Período de trial expirado",
-        assinaturaAtiva: false,
+        expirado: true,
       };
     } else {
       // Plano pago - buscar último histórico de assinatura
@@ -171,33 +183,38 @@ const validarAssinatura = async function (dados, contentType) {
         usuario.id,
       );
 
+      console.log("Históricos encontrados:", historicos?.length || 0);
+
       if (historicos && historicos.length > 0) {
         const ultimoHistorico = historicos[0]; // Já vem ordenado por data DESC
+        console.log("Último histórico:", ultimoHistorico);
+        console.log("Prazo original:", ultimoHistorico.prazo);
+        console.log("is_cancelado:", ultimoHistorico.is_cancelado);
 
-        // Verificar se não foi cancelado e se não expirou
-        if (!ultimoHistorico.is_cancelado) {
-          const prazo = new Date(ultimoHistorico.prazo);
-          if (prazo >= agora) {
-            return {
-              status: MESSAGE.SUCCESS_REQUEST.status,
-              status_code: MESSAGE.SUCCESS_REQUEST.status_code,
-              message: "Assinatura ativa",
-              assinaturaAtiva: true,
-              tipo: "paga",
-              validade: ultimoHistorico.prazo,
-              plano: ultimoHistorico.nome_assinatura,
-              historico: ultimoHistorico,
-            };
-          }
-        }
+        const prazo = new Date(ultimoHistorico.prazo);
+        const prazoDia = new Date(
+          Date.UTC(
+            prazo.getUTCFullYear(),
+            prazo.getUTCMonth(),
+            prazo.getUTCDate(),
+          ),
+        );
+        console.log("Prazo Dia:", prazoDia);
+        console.log("Hoje Inicio:", hojeInicio);
+        console.log("prazoDia < hojeInicio?", prazoDia < hojeInicio);
+
+        const expirado = ultimoHistorico.is_cancelado || prazoDia < hojeInicio;
+        console.log("Expirado final?", expirado);
+
+        return {
+          expirado: expirado,
+        };
       }
 
-      // Assinatura cancelada ou expirada
+      // Sem histórico de assinatura
+      console.log("Sem histórico de assinatura");
       return {
-        status: MESSAGE.SUCCESS_REQUEST.status,
-        status_code: MESSAGE.SUCCESS_REQUEST.status_code,
-        message: "Assinatura inativa ou expirada",
-        assinaturaAtiva: false,
+        expirado: true,
       };
     }
   } catch (error) {
@@ -251,10 +268,14 @@ const login = async function (dados, contentType) {
     let planoNome = null;
 
     const agora = getDataBrasilia();
+    // Zerar horas para comparar apenas datas (UTC)
+    const hojeInicio = new Date(
+      Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate()),
+    );
 
     console.log("🔍 [LOGIN] Validando assinatura...");
     console.log("🔍 [LOGIN] Usuario plano_id:", usuario.plano_id);
-    console.log("🔍 [LOGIN] Data atual (Brasília):", agora);
+    console.log("🔍 [LOGIN] Data atual (Brasília):", hojeInicio);
 
     if (usuario.plano_id === 1) {
       // Plano teste/gratuito - validar trial_end
@@ -263,10 +284,17 @@ const login = async function (dados, contentType) {
 
       if (usuario.trial_end) {
         const trialEnd = new Date(usuario.trial_end);
-        console.log("📋 [LOGIN] Trial end (Date):", trialEnd);
-        console.log("📋 [LOGIN] Trial ativo?", trialEnd > agora);
+        const trialEndDia = new Date(
+          Date.UTC(
+            trialEnd.getUTCFullYear(),
+            trialEnd.getUTCMonth(),
+            trialEnd.getUTCDate(),
+          ),
+        );
+        console.log("📋 [LOGIN] Trial end (Date):", trialEndDia);
+        console.log("📋 [LOGIN] Trial ativo?", trialEndDia >= hojeInicio);
 
-        if (trialEnd > agora) {
+        if (trialEndDia >= hojeInicio) {
           assinaturaAtiva = true;
           assinaturaTipo = "trial";
           assinaturaValidade = usuario.trial_end;
@@ -302,10 +330,17 @@ const login = async function (dados, contentType) {
 
         if (!ultimoHistorico.is_cancelado) {
           const prazo = new Date(ultimoHistorico.prazo);
-          console.log("💳 [LOGIN] Prazo:", prazo);
-          console.log("💳 [LOGIN] Prazo >= agora?", prazo >= agora);
+          const prazoDia = new Date(
+            Date.UTC(
+              prazo.getUTCFullYear(),
+              prazo.getUTCMonth(),
+              prazo.getUTCDate(),
+            ),
+          );
+          console.log("💳 [LOGIN] Prazo:", prazoDia);
+          console.log("💳 [LOGIN] Prazo >= hoje?", prazoDia >= hojeInicio);
 
-          if (prazo >= agora) {
+          if (prazoDia >= hojeInicio) {
             assinaturaAtiva = true;
             assinaturaTipo = "paga";
             assinaturaValidade = ultimoHistorico.prazo;

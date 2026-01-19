@@ -52,13 +52,13 @@ router.post("/auth/login", async (request, response) => {
   response.json(resultado);
 });
 
-router.post("/auth/validar-assinatura", async (request, response) => {
+router.get("/auth/validar-assinatura", async (request, response) => {
   let contentType = request.headers["content-type"];
   let dadosBody = request.body;
 
   let resultado = await controllerAuth.validarAssinatura(
     dadosBody,
-    contentType
+    contentType,
   );
 
   response.status(resultado.status_code || 200);
@@ -109,12 +109,12 @@ router.put(
     let resultado = await controllerUsuario.atualizarUsuario(
       user_id,
       dadosPermitidos,
-      contentType
+      contentType,
     );
 
     response.status(resultado.status_code || 200);
     response.json(resultado);
-  }
+  },
 );
 
 router.post(
@@ -129,7 +129,7 @@ router.post(
 
     response.status(resultado.status_code || 200);
     response.json(resultado);
-  }
+  },
 );
 
 // ==============================
@@ -145,7 +145,7 @@ router.post("/transacoes", autenticar, async (request, response) => {
 
   let resultado = await controllerTransacao.inserirTransacao(
     dadosBody,
-    contentType
+    contentType,
   );
 
   response.status(resultado.status_code || 200);
@@ -166,12 +166,12 @@ router.put(
       codigo,
       dadosBody,
       contentType,
-      user_id
+      user_id,
     );
 
     response.status(resultado.status_code || 200);
     response.json(resultado);
-  }
+  },
 );
 
 router.delete(
@@ -186,7 +186,7 @@ router.delete(
 
     response.status(resultado.status_code || 200);
     response.json(resultado);
-  }
+  },
 );
 router.get(
   "/transacoes/:codigo",
@@ -199,7 +199,7 @@ router.get(
 
     response.status(resultado.status_code || 200);
     response.json(resultado);
-  }
+  },
 );
 router.get(
   "/transacoes",
@@ -214,12 +214,12 @@ router.get(
 
     let resultado = await controllerTransacao.listarTransacoesPorUsuario(
       user_id,
-      filters
+      filters,
     );
 
     response.status(resultado.status_code || 200);
     response.json(resultado);
-  }
+  },
 );
 
 // Rotas simplificadas
@@ -251,7 +251,7 @@ router.get(
 
     response.status(resultado.status_code || 200);
     response.json(resultado);
-  }
+  },
 );
 
 router.get("/resumo", autenticar, async (request, response) => {
@@ -280,7 +280,7 @@ router.post("/assinaturas", autenticar, async (request, response) => {
 
   let resultado = await controllerAssinatura.criarAssinatura(
     dadosBody,
-    contentType
+    contentType,
   );
 
   response.status(resultado.status_code || 200);
@@ -295,13 +295,12 @@ router.get(
     // Pegar usuario_codigo do token automaticamente
     let usuarioCodigo = request.usuarioId;
 
-    let resultado = await controllerAssinatura.buscarAssinaturaPorUsuario(
-      usuarioCodigo
-    );
+    let resultado =
+      await controllerAssinatura.buscarAssinaturaPorUsuario(usuarioCodigo);
 
     response.status(resultado.status_code || 200);
     response.json(resultado);
-  }
+  },
 );
 
 module.exports = router;
