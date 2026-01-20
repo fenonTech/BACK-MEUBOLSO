@@ -21,6 +21,16 @@ const controllerAssinatura = require("../controller/assinatura/controllerAssinat
 // ROTAS DE AUTENTICAÇÃO
 // ==============================
 
+router.post("/auth/cadastrar", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
+
+  let resultado = await controllerAuth.cadastrarUsuario(dadosBody, contentType);
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
 router.post("/auth/gerar-codigo", async (request, response) => {
   let contentType = request.headers["content-type"];
   let dadosBody = request.body;

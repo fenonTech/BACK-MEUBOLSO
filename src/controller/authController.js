@@ -411,9 +411,167 @@ const login = async function (dados, contentType) {
   }
 };
 
+/**
+ * CADASTRAR NOVO USUÁRIO COM PLANO 4 E TRIAL DE 5 DIAS
+ */
+const cadastrarUsuario = async function (dados, contentType) {
+  try {
+    if (contentType !== "application/json") {
+      return MESSAGE.ERROR_CONTENT_TYPE;
+    }
+
+    // Validar campos obrigatórios
+    if (!dados.nome || !dados.telefone || !dados.email) {
+      return {
+        status: MESSAGE.ERROR_REQUIRED_FIELDS.status,
+        status_code: MESSAGE.ERROR_REQUIRED_FIELDS.status_code,
+        message: "Nome, telefone e email são obrigatórios",
+      };
+    }
+
+    console.log("📝 [CADASTRO] Iniciando cadastro de usuário...");
+    console.log("📝 [CADASTRO] Dados:", {
+      nome: dados.nome,
+      telefone: dados.telefone,
+      email: dados.email,
+    });
+
+    // 1. Verificar se o telefone já existe
+    const usuarioExistente = await usuarioDAO.selectByTelefoneUsuario(
+      dados.telefone,
+    );
+
+    if (usuarioExistente) {
+      return {
+        status: MESSAGE.ERROR_BAD_REQUEST.status,
+        status_code: MESSAGE.ERROR_BAD_REQUEST.status_code,
+        message: "Telefone já cadastrado",
+      };
+    }
+
+    // 2. Calcular prazo de 5 dias
+    const agora = getDataBrasilia();
+    const prazo = new Date(agora.getTime() + 5 * 24 * 60 * 60 * 1000);
+    const prazoFormatado = prazo.toISOString().split("T")[0]; // YYYY-MM-DD
+
+    console.log("📝 [CADASTRO] Prazo calculado:", prazoFormatado);
+
+    // 3. Criar usuário no banco com plano 4
+    const novoUsuario = await supabase
+      .from("usuarios")
+      .insert([
+        {
+          nome: dados.nome,
+          telefone: dados.telefone,
+          email: dados.email,
+          mensagens: 0,
+          plano_id: 4,
+          status_plano: "Plano visionario - Trial",
+        },
+      ])
+      .select();
+
+    if (novoUsuario.error) {
+      console.error("❌ [CADASTRO] Erro ao criar usuário:", novoUsuario.error);
+      return MESSAGE.ERROR_INTERNAL_SERVER_DB;
+    }
+
+    const usuario = novoUsuario.data[0];
+    console.log("✅ [CADASTRO] Usuário criado:", usuario);
+
+    // 4. Criar registro no histórico de assinatura
+    const historicoData = {
+      usuarioCodigo: usuario.id,
+      checkout_id: `trial_5_dias`,
+      nome_assinatura: "Plano visionario - Trial 5 dias",
+      dataAssinatura: agora.toISOString(),
+      prazo: prazoFormatado,
+      plano_id_cakto: "trial_5_dias",
+      plano_id: 4,
+      is_cancelado: false,
+    };
+
+    const historico =
+      await historicoAssinaturaDAO.insertHistoricoAssinatura(historicoData);
+
+    if (!historico) {
+      console.error("❌ [CADASTRO] Erro ao criar histórico de assinatura");
+      // Não vamos falhar o cadastro por isso, mas vamos logar
+    } else {
+      console.log("✅ [CADASTRO] Histórico de assinatura criado:", historico);
+    }
+
+    // 5. Gerar código temporário
+    const codigo = authDAO.gerarCodigoTemp();
+    const codigoArmazenado = await authDAO.armazenarCodigo(
+      dados.telefone,
+      codigo,
+      false,
+    );
+
+    if (!codigoArmazenado) {
+      console.error("❌ [CADASTRO] Erro ao gerar código temporário");
+    } else {
+      console.log("✅ [CADASTRO] Código temporário gerado:", codigo);
+    }
+
+    // 6. Chamar webhook n8n
+    try {
+      const mensagem = `Parabéns você ganhou 5 dias grátis acesse seu dashboard : https://www.fenontech.com.br/dashboard/index.html?telefone=${encodeURIComponent(dados.telefone)}&codigo=${codigo}`;
+
+      const webhookUrl =
+        "https://n8n.srv1056458.hstgr.cloud/webhook/5d029e9b-3b32-4d2b-b850-cc8133a2b2a0";
+
+      console.log("📞 [CADASTRO] Chamando webhook n8n...");
+
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          telefone: dados.telefone,
+          mensagem: mensagem,
+        }),
+      });
+
+      if (response.ok) {
+        console.log("✅ [CADASTRO] Webhook chamado com sucesso");
+      } else {
+        console.error("⚠️ [CADASTRO] Webhook retornou erro:", response.status);
+      }
+    } catch (webhookError) {
+      console.error("⚠️ [CADASTRO] Erro ao chamar webhook:", webhookError);
+      // Não vamos falhar o cadastro por erro no webhook
+    }
+
+    return {
+      status: MESSAGE.SUCCESS_CREATED.status,
+      status_code: MESSAGE.SUCCESS_CREATED.status_code,
+      message:
+        "Usuário cadastrado com sucesso! Você ganhou 5 dias grátis do Plano Visionário.",
+      usuario: {
+        id: usuario.id,
+        nome: usuario.nome,
+        telefone: usuario.telefone,
+        email: usuario.email,
+        plano: "Plano visionario - Trial 5 dias",
+        prazo: prazoFormatado,
+      },
+    };
+  } catch (error) {
+    console.error("❌ [CADASTRO] Erro no controller cadastrarUsuario:", error);
+    return MESSAGE.ERROR_INTERNAL_SERVER;
+  }
+};
+
+// Importar supabase para uso direto
+const supabase = require("../config/supabase.js");
+
 module.exports = {
   enviarCodigo,
   validarCodigo,
   validarAssinatura,
   login,
+  cadastrarUsuario,
 };
