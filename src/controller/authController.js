@@ -440,8 +440,8 @@ const cadastrarUsuario = async function (dados, contentType) {
     let mensagem;
 
     if (usuarioExistente) {
-      // Usuário já existe - apenas gera código e envia mensagem
-      console.log("👤 [CADASTRO] Usuário já existe - gerando código...");
+      // Usuário já existe - apenas envia mensagem (NÃO atualiza histórico de assinatura)
+      console.log("👤 [CADASTRO] Usuário já existe - enviando mensagem...");
 
       codigo = authDAO.gerarCodigoTemp();
       const codigoArmazenado = await authDAO.armazenarCodigo(
