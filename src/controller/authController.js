@@ -458,12 +458,12 @@ const cadastrarUsuario = async function (dados, contentType) {
       console.log("✅ [CADASTRO] Código temporário gerado:", codigo);
 
       mensagem = `Olá! Para acessar e visualizar melhor seus gastos e entradas, utilize o dashboard:
-https://www.fenontech.com.br/dashboard/index.html?telefone=${encodeURIComponent(dados.telefone)}&codigo=${codigo}`;
+https://www.meubolsoia.com.br/dashboard/index.html?telefone=${encodeURIComponent(dados.telefone)}&codigo=${codigo}`;
 
       // Chamar webhook n8n
       try {
         const webhookUrl =
-          "https://n8n.srv1056458.hstgr.cloud/webhook/5d029e9b-3b32-4d2b-b850-cc8133a2b2a0";
+          "https://n8n.srv1056458.hstgr.cloud/webhook/enviarMensagem";
 
         console.log("📞 [CADASTRO] Chamando webhook n8n...");
 
@@ -575,7 +575,7 @@ https://www.fenontech.com.br/dashboard/index.html?telefone=${encodeURIComponent(
       // 6. Chamar webhook n8n
       try {
         const webhookUrl =
-          "https://n8n.srv1056458.hstgr.cloud/webhook/5d029e9b-3b32-4d2b-b850-cc8133a2b2a0";
+          "https://n8n.srv1056458.hstgr.cloud/webhook/enviarMensagem";
 
         console.log("📞 [CADASTRO] Chamando webhook n8n...");
 
