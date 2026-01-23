@@ -120,9 +120,9 @@ const selectAllTransacoesByUser = async function (user_id, filters = {}) {
         .lte("data_pagamento", `${filters.ano}-12-31`);
     }
 
-    const { data, error } = await query.order("data_pagamento", {
-      ascending: false,
-    });
+    const { data, error } = await query
+      .order("created_at", { ascending: false })
+      .order("codigo", { ascending: false });
 
     if (error) throw error;
     return data;
@@ -166,7 +166,7 @@ const selectDespesasTransacao = async function (user_id, filters = {}) {
     if (filters.mes && filters.ano) {
       const dataInicio = `${filters.ano}-${String(filters.mes).padStart(
         2,
-        "0"
+        "0",
       )}-01`;
       const dataFim = new Date(filters.ano, filters.mes, 0)
         .toISOString()
@@ -202,7 +202,7 @@ const selectEntradasTransacao = async function (user_id, filters = {}) {
     if (filters.mes && filters.ano) {
       const dataInicio = `${filters.ano}-${String(filters.mes).padStart(
         2,
-        "0"
+        "0",
       )}-01`;
       const dataFim = new Date(filters.ano, filters.mes, 0)
         .toISOString()
@@ -238,7 +238,7 @@ const calcularTotais = async function (user_id, filters = {}) {
     if (filters.mes && filters.ano) {
       const dataInicio = `${filters.ano}-${String(filters.mes).padStart(
         2,
-        "0"
+        "0",
       )}-01`;
       const dataFim = new Date(filters.ano, filters.mes, 0)
         .toISOString()
