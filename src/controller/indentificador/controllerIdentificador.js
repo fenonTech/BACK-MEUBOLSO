@@ -135,11 +135,10 @@ async function processarMensagem(frase, user_id, telefone = null) {
     "estatistica",
   ];
 
-  const isConsulta = palavrasConsulta.some((palavra) => msg.includes(palavra));
-
-  if (isConsulta) {
-    return INTENCOES.CONSULTAR_TRANSACOES;
-  }
+  const palavraConsultaEncontrada = palavrasConsulta.find((palavra) =>
+    msg.includes(palavra),
+  );
+  const isConsulta = palavraConsultaEncontrada !== undefined;
 
   /* =========================
    REGISTRO (gasto / entrada)
@@ -147,19 +146,24 @@ async function processarMensagem(frase, user_id, telefone = null) {
   const palavrasRegistro = [
     "gastei",
     "gasto",
+    "registre",
     "gastar",
     "gastarei",
     "gasterei",
     "paguei",
     "pago",
+    "pagar",
     "pagarei",
     "vou pagar",
     "comprei",
     "comprar",
+    "compra",
     "recebi",
+    "receber",
     "receberei",
     "vou receber",
     "ganhei",
+    "ganhar",
     "ganharei",
     "salario",
     "pix recebido",
@@ -183,11 +187,28 @@ async function processarMensagem(frase, user_id, telefone = null) {
   const numeros = extrairNumeros(frase);
   const temValor = numeros.length > 0;
 
-  // Só registra se:
-  // - tem palavra de registro
-  // - tem valor
+  console.log("📝 Debug intenção:", {
+    isRegistro,
+    isConsulta,
+    palavraConsultaEncontrada,
+    temValor,
+    numeros,
+    msg: msg.substring(0, 100),
+  });
+
+  // PRIORIDADE: Se tem palavra de registro + valor, é REGISTRO (mesmo que tenha palavra de consulta)
   if (isRegistro && temValor) {
+    console.log("✅ Detectado como REGISTRO (prioridade sobre consulta)");
     return INTENCOES.REGISTRAR_TRANSACAO;
+  }
+
+  // Se só tem consulta sem registro, é CONSULTA
+  if (isConsulta) {
+    console.log(
+      "✅ Detectado como CONSULTA - Palavra encontrada:",
+      palavraConsultaEncontrada,
+    );
+    return INTENCOES.CONSULTAR_TRANSACOES;
   }
 
   /* =========================
@@ -258,10 +279,46 @@ async function handlerRegistrarTransacao(frase, user_id, telefone) {
   const numeros = extrairNumeros(frase);
   console.log("🔢 Números extraídos:", numeros);
 
+  // Detectar múltiplas transações (mais de 2 valores ou múltiplas conjunções)
+  const temMultiplasTransacoes = detectarMultiplasTransacoes(frase, numeros);
+
+  if (temMultiplasTransacoes) {
+    console.log("⚠️ Detectadas múltiplas transações na mensagem");
+
+    if (telefone) {
+      const mensagemOrientacao = `⚠️ Detectei que você está tentando registrar múltiplas transações de uma vez.
+
+📝 *Por favor, registre uma transação por vez:*
+
+Exemplo correto:
+• "Gastei 50 reais com Uber"
+• "Gastei 60 reais com pão"
+
+Isso me ajuda a registrar corretamente cada gasto ou entrada! 😊`;
+
+      await enviarMensagemWhatsApp(telefone, mensagemOrientacao);
+    }
+
+    return {
+      status: "info",
+      status_code: 200,
+      message: "Por favor, registre uma transação por vez",
+      mensagemEnviada: true,
+    };
+  }
+
   // Interpreta os componentes da transação
   const dataPagamento = await interpretarData(frase, numeros);
-  const valor = await interpretarValor(frase, numeros);
+  let valor = await interpretarValor(frase, numeros);
   const is_entrada = await interpretarTipo(frase);
+
+  // Se o valor vier com múltiplos valores separados por |, somar todos
+  if (typeof valor === "string" && valor.includes("|")) {
+    console.log("🔢 Múltiplos valores detectados, somando:", valor);
+    const valores = valor.split("|").map((v) => parseFloat(v.trim()));
+    valor = valores.reduce((acc, v) => acc + v, 0);
+    console.log("💰 Valor total após soma:", valor);
+  }
 
   console.log("📊 Dados interpretados:", {
     dataPagamento,
@@ -688,6 +745,31 @@ function montarPayload(user_id, descricao, dados) {
 // ==============================
 
 /**
+ * Detecta se a mensagem contém múltiplas transações
+ */
+function detectarMultiplasTransacoes(frase, numeros) {
+  // Se há mais de 2 valores, provavelmente são múltiplas transações
+  if (numeros.length > 2) {
+    return true;
+  }
+
+  // Detectar múltiplas conjunções que indicam lista
+  const conjuncoes = (frase.match(/\be\b/gi) || []).length;
+  if (conjuncoes >= 2 && numeros.length >= 2) {
+    return true;
+  }
+
+  // Detectar padrões de lista (vírgula + "e")
+  const temVirgula = frase.includes(",");
+  const temE = /\be\b/i.test(frase);
+  if (temVirgula && temE && numeros.length >= 2) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Extrai números de um texto (valores monetários)
  */
 function extrairNumeros(texto) {
@@ -834,9 +916,28 @@ function formatarMensagemDelecao(
     ? `\n\n📊 Para visualizar melhor seus gastos e entradas, utilize o dashboard:\nhttps://www.meubolsoia.com.br/dashboard/index.html?telefone=${encodeURIComponent(telefone)}&codigo=${codigo}`
     : "";
 
+  // Formatar valor
+  const valorFormatado = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(transacao.valor || 0);
+
+  // Tipo da transação
+  const tipo = transacao.is_entrada ? "📥 Entrada" : "📤 Saída";
+
   const mensagem = ehUltimaTransacao
-    ? "✅ Última transação excluída com sucesso!"
-    : `✅ Transação #${transacao.codigo} excluída com sucesso!`;
+    ? `✅ Última transação excluída com sucesso!
+
+🆔 ID: ${transacao.codigo}
+${tipo}
+💰 Valor: ${valorFormatado}
+📝 Descrição: ${transacao.descricao || "Sem descrição"}`
+    : `✅ Transação excluída com sucesso!
+
+🆔 ID: ${transacao.codigo}
+${tipo}
+💰 Valor: ${valorFormatado}
+📝 Descrição: ${transacao.descricao || "Sem descrição"}`;
 
   return `${mensagem}${linkDashboard}`;
 }
