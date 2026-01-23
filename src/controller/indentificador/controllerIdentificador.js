@@ -824,7 +824,12 @@ function formatarMensagemTransacao(
 /**
  * Formata mensagem de confirmação de exclusão
  */
-function formatarMensagemDelecao(transacao, telefone, codigo, ehUltimaTransacao = false) {
+function formatarMensagemDelecao(
+  transacao,
+  telefone,
+  codigo,
+  ehUltimaTransacao = false,
+) {
   const linkDashboard = codigo
     ? `\n\n📊 Para visualizar melhor seus gastos e entradas, utilize o dashboard:\nhttps://www.meubolsoia.com.br/dashboard/index.html?telefone=${encodeURIComponent(telefone)}&codigo=${codigo}`
     : "";
