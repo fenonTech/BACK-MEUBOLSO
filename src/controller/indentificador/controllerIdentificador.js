@@ -57,53 +57,11 @@ async function processarMensagem(frase, user_id, telefone = null) {
       default:
         console.log("❓ Intenção não reconhecida ou fora de escopo");
 
-        // Enviar mensagem ao usuário informando que não entendeu
-        if (telefone) {
-          // Gerar código temporário para o link do dashboard
-          const codigo = authDAO.gerarCodigoTemp();
-          const codigoArmazenado = await authDAO.armazenarCodigo(
-            telefone,
-            codigo,
-            false,
-          );
-
-          const linkDashboard = codigoArmazenado
-            ? `\n\n📊 Para visualizar melhor seus gastos e entradas, utilize o dashboard:\nhttps://www.meubolsoia.com.br/dashboard/index.html?telefone=${encodeURIComponent(telefone)}&codigo=${codigo}`
-            : "";
-
-          const mensagemNaoEntendida = `❓ Desculpe, não consegui entender sua mensagem.
-
-📝 Aqui estão algumas coisas que você pode fazer:
-
-📊 *Registrar transação:*
-• "Gastei 50 reais com almoço"
-• "Recebi 100 reais ontem"
-
-📈 *Consultar transações:*
-• "Quanto gastei esse mês?"
-• "Mostre minhas despesas"
-
-🗑️ *Deletar transação:*
-• "Deletar última transação"
-• "Apagar transação 123"
-
-📊 *Acessar dashboard:*
-• "Dashboard"
-• "Meu painel"
-• "Link do site"
-
-Por favor, tente novamente reformulando sua mensagem.${linkDashboard}`;
-
-          console.log("📱 Enviando mensagem de ajuda...");
-          await enviarMensagemWhatsApp(telefone, mensagemNaoEntendida);
-        }
-
         return {
           status: "erro",
           status_code: 400,
           message:
             "Não consegui entender sua solicitação. Tente reformular a mensagem.",
-          mensagemEnviada: true,
         };
     }
   } catch (error) {
