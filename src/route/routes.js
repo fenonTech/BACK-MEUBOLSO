@@ -16,6 +16,7 @@ const controllerAuth = require("../controller/authController.js");
 const controllerUsuario = require("../controller/usuario/controllerUsuario.js");
 const controllerTransacao = require("../controller/transacao/controllerTransacao.js");
 const controllerAssinatura = require("../controller/assinatura/controllerAssinatura.js");
+const controllerIdentificador = require("../controller/indentificador/controllerIdentificador.js");
 
 // ==============================
 // ROTAS DE AUTENTICAÇÃO
@@ -311,5 +312,95 @@ router.get(
     response.json(resultado);
   },
 );
+
+// ==============================
+// ROTA DE IDENTIFICADOR (SEM AUTENTICAÇÃO)
+// ==============================
+
+/**
+ * Endpoint para processar mensagens em linguagem natural
+ * Recebe telefone + mensagem e identifica automaticamente transações
+ */
+router.post("/identificador", async (req, res) => {
+  try {
+    console.log("📥 [IDENTIFICADOR] Requisição recebida");
+    const { telefone, mensagem } = req.body;
+
+    // Validação de entrada
+    if (!telefone || !mensagem) {
+      console.log("❌ [IDENTIFICADOR] Campos obrigatórios ausentes");
+      return res.status(400).json({
+        status: "erro",
+        message: "Telefone e mensagem são obrigatórios",
+      });
+    }
+
+    console.log("📞 Telefone:", telefone);
+    console.log("💬 Mensagem:", mensagem);
+
+    // Buscar usuário pelo telefone
+    console.log("🔍 Buscando usuário...");
+    const resultadoUsuario =
+      await controllerUsuario.buscarUsuarioPorTelefone(telefone);
+
+    if (resultadoUsuario.status_code !== 200) {
+      console.log("❌ Usuário não encontrado para o telefone:", telefone);
+      return res.status(404).json({
+        status: "erro",
+        message: "Usuário não encontrado",
+      });
+    }
+
+    const user_id = resultadoUsuario.usuario.id;
+    console.log("👤 Usuário encontrado - ID:", user_id);
+
+    // Processar mensagem e criar transação
+    console.log("🔄 Processando mensagem...");
+    const resultado = await controllerIdentificador.processarMensagem(
+      mensagem,
+      user_id,
+      telefone, // Passar telefone para envio de mensagens
+    );
+
+    // Verificar resultado do processamento
+    const isErro =
+      resultado.status_code &&
+      resultado.status_code !== 200 &&
+      resultado.status_code !== 201;
+
+    if (isErro) {
+      console.log("❌ Erro ao processar mensagem:", resultado.message);
+      return res.status(resultado.status_code).json({
+        status: resultado.status || "erro",
+        message: resultado.message || "Erro ao processar mensagem",
+      });
+    }
+
+    // Se for consulta de transações, enviar relatório via WhatsApp
+    if (resultado.relatorio) {
+      console.log("📊 Enviando relatório via WhatsApp...");
+      await controllerIdentificador.enviarMensagemWhatsApp(
+        telefone,
+        resultado.relatorio,
+      );
+    }
+
+    // Retornar sucesso
+    console.log("✅ Processamento concluído com sucesso");
+    return res.status(200).json({
+      status: "sucesso",
+      message: resultado.message || "Operação realizada com sucesso",
+      transacao: resultado.transacao,
+      relatorio: resultado.relatorio,
+    });
+  } catch (error) {
+    console.error("❌ [IDENTIFICADOR] Erro interno:", error);
+    console.error("Stack:", error.stack);
+    return res.status(500).json({
+      status: "erro",
+      message: "Erro interno no servidor",
+    });
+  }
+});
 
 module.exports = router;
