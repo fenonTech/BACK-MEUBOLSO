@@ -399,6 +399,7 @@ async function handlerDeletarTransacao(frase, user_id, telefone) {
     // Tentar extrair ID da mensagem
     const idMatch = frase.match(/\b(\d+)\b/);
     let transacaoCodigo = null;
+    let ehUltimaTransacao = false;
 
     if (idMatch) {
       transacaoCodigo = parseInt(idMatch[1]);
@@ -406,6 +407,7 @@ async function handlerDeletarTransacao(frase, user_id, telefone) {
     } else {
       // Se não encontrou ID, buscar a última transação do usuário
       console.log("🔍 Buscando última transação do usuário...");
+      ehUltimaTransacao = true;
       const transacoes = await controllerTransacao.listarTransacoesPorUsuario(
         user_id,
         {},
@@ -509,6 +511,7 @@ async function handlerDeletarTransacao(frase, user_id, telefone) {
         transacaoParaDeletar.transacao,
         telefone,
         codigoArmazenado ? codigo : null,
+        ehUltimaTransacao,
       );
 
       console.log("📱 Enviando confirmação de exclusão...");
@@ -821,12 +824,16 @@ function formatarMensagemTransacao(
 /**
  * Formata mensagem de confirmação de exclusão
  */
-function formatarMensagemDelecao(transacao, telefone, codigo) {
+function formatarMensagemDelecao(transacao, telefone, codigo, ehUltimaTransacao = false) {
   const linkDashboard = codigo
     ? `\n\n📊 Para visualizar melhor seus gastos e entradas, utilize o dashboard:\nhttps://www.meubolsoia.com.br/dashboard/index.html?telefone=${encodeURIComponent(telefone)}&codigo=${codigo}`
     : "";
 
-  return `Transação deletada com sucesso! 👍${linkDashboard}`;
+  const mensagem = ehUltimaTransacao
+    ? "✅ Última transação excluída com sucesso!"
+    : `✅ Transação #${transacao.codigo} excluída com sucesso!`;
+
+  return `${mensagem}${linkDashboard}`;
 }
 
 /**
