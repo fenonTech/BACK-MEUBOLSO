@@ -6,6 +6,7 @@
  **************************************************************************/
 
 const supabase = require("../../config/supabase.js");
+const axios = require("axios");
 
 /**
  * INSERIR TRANSAÇÃO
@@ -21,11 +22,50 @@ const insertTransacao = async function (dadosTransacao) {
     // Formatar para timestamp sem timezone (timestamp with time zone do PostgreSQL interpretará como UTC)
     const timestamp = brasiliaTime.toISOString().slice(0, 19).replace("T", " ");
 
+    // Obter categoria/tipo através da API
+    let tipo = null;
+    if (dadosTransacao.descricao) {
+      try {
+        console.log(
+          "🤖 Chamando API de categorização para:",
+          dadosTransacao.descricao,
+        );
+        const response = await axios.post(
+          "https://n8n.srv1056458.hstgr.cloud/webhook/agenteCategoria",
+          { mensagem: dadosTransacao.descricao },
+          {
+            headers: { "Content-Type": "application/json" },
+            timeout: 10000, // 10 segundos de timeout
+          },
+        );
+
+        console.log(
+          "📦 Resposta completa da API:",
+          JSON.stringify(response.data, null, 2),
+        );
+
+        if (response.data && response.data.categoria) {
+          tipo = response.data.categoria;
+          console.log("✅ Categoria identificada:", tipo);
+        } else {
+          console.log("⚠️ API não retornou categoria no formato esperado");
+          console.log("⚠️ Estrutura recebida:", response.data);
+        }
+      } catch (error) {
+        console.error("❌ Erro ao chamar API de categorização:", error.message);
+        if (error.response) {
+          console.error("❌ Status da resposta:", error.response.status);
+          console.error("❌ Dados da resposta:", error.response.data);
+        }
+        // Continua sem tipo se a API falhar
+      }
+    }
+
     const transacaoData = {
       user_id: dadosTransacao.user_id,
       descricao: dadosTransacao.descricao || null,
       valor: dadosTransacao.valor,
-      tipo: dadosTransacao.tipo || null,
+      tipo: tipo,
       is_entrada: dadosTransacao.is_entrada,
       data_pagamento: dadosTransacao.data_pagamento,
       created_at: dadosTransacao.created_at || timestamp,
