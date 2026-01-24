@@ -965,6 +965,9 @@ function formatarMensagemTransacao(
   // O ID pode estar como 'id' ou 'codigo' dependendo do retorno do banco
   const idTransacao = transacao.codigo || transacao.id || "N/A";
 
+  // Categoria (se disponível)
+  const categoria = transacao.tipo ? `\n🏷️ Categoria: ${transacao.tipo}` : "";
+
   const linkDashboard = codigo
     ? `\n\n📊 Para visualizar melhor seus gastos e entradas, utilize o dashboard:\nhttps://www.meubolsoia.com.br/dashboard/index.html?telefone=${encodeURIComponent(telefone)}&codigo=${codigo}`
     : "";
@@ -975,7 +978,7 @@ function formatarMensagemTransacao(
 💸 Tipo: ${tipo}
 💰 Valor: ${valorFormatado}
 📅 Data: ${dataFormatada}
-📝 Descrição: ${descricao}${linkDashboard}`;
+📝 Descrição: ${descricao}${categoria}${linkDashboard}`;
 }
 
 /**
