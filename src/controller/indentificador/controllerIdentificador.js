@@ -144,12 +144,12 @@ async function processarMensagem(frase, user_id, telefone = null) {
     const regex = new RegExp(`\\b${palavra}\\b`, "i");
     return regex.test(msg);
   });
-  
+
   // Verificação especial para "o que" - precisa estar no início ou com espaços
   if (!palavraConsultaEncontrada && /\bo\s+que\b/.test(msg)) {
     palavraConsultaEncontrada = "o que";
   }
-  
+
   const isConsulta = palavraConsultaEncontrada !== undefined;
 
   /* =========================
