@@ -117,7 +117,6 @@ async function processarMensagem(frase, user_id, telefone = null) {
   const palavrasConsulta = [
     "quanto",
     "saldo",
-    "o que",
     "quais",
     "listar",
     "mostrar",
@@ -135,9 +134,22 @@ async function processarMensagem(frase, user_id, telefone = null) {
     "estatistica",
   ];
 
-  const palavraConsultaEncontrada = palavrasConsulta.find((palavra) =>
-    msg.includes(palavra),
-  );
+  // Verificar palavras completas usando word boundaries
+  let palavraConsultaEncontrada = palavrasConsulta.find((palavra) => {
+    // Para frases com múltiplas palavras, usar includes
+    if (palavra.includes(" ")) {
+      return msg.includes(palavra);
+    }
+    // Para palavras únicas, verificar com word boundaries
+    const regex = new RegExp(`\\b${palavra}\\b`, "i");
+    return regex.test(msg);
+  });
+  
+  // Verificação especial para "o que" - precisa estar no início ou com espaços
+  if (!palavraConsultaEncontrada && /\bo\s+que\b/.test(msg)) {
+    palavraConsultaEncontrada = "o que";
+  }
+  
   const isConsulta = palavraConsultaEncontrada !== undefined;
 
   /* =========================
@@ -179,7 +191,16 @@ async function processarMensagem(frase, user_id, telefone = null) {
     "boleto",
   ];
 
-  const isRegistro = palavrasRegistro.some((palavra) => msg.includes(palavra));
+  // Verificar palavras completas usando word boundaries
+  const isRegistro = palavrasRegistro.some((palavra) => {
+    // Para frases com múltiplas palavras, usar includes
+    if (palavra.includes(" ")) {
+      return msg.includes(palavra);
+    }
+    // Para palavras únicas, verificar com word boundaries
+    const regex = new RegExp(`\\b${palavra}\\b`, "i");
+    return regex.test(msg);
+  });
 
   /* =========================
    VALOR (OBRIGATÓRIO PARA REGISTRO)
