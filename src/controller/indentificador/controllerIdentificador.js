@@ -119,6 +119,7 @@ async function processarMensagem(frase, user_id, telefone = null) {
     "saldo",
     "quais",
     "listar",
+    "qual",
     "mostrar",
     "ver",
     "visualizar",
