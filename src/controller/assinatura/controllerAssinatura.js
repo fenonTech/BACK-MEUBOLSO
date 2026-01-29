@@ -6,6 +6,7 @@
 
 const MESSAGE = require("../../modulo/config.js");
 const usuarioDAO = require("../../model/DAO/usuario.js");
+const assinaturaDAO = require("../../model/DAO/assinatura.js");
 const historicoAssinaturaDAO = require("../../model/DAO/historicoAssinatura.js");
 
 /**
@@ -19,17 +20,97 @@ const normalizarTexto = function (texto) {
 };
 
 /**
- * HELPER: Mapear nome do plano para plano_id
+ * HELPER: Mapear nome do plano para plano_id e estrutura de mensagem
  * Essencial = 2
  * Inteligente = 3
  * Visionário = 4
  */
-const mapearPlanoId = function (nomePlano) {
+const mapearPlanoId = function (nomePlano, telefoneUsuario = null) {
   const nomeNormalizado = normalizarTexto(nomePlano);
 
-  if (nomeNormalizado.includes("essencial")) return 2;
-  if (nomeNormalizado.includes("inteligente")) return 3;
-  if (nomeNormalizado.includes("visionario")) return 4;
+  const estruturaBase = {
+    phone: telefoneUsuario,
+    message: "",
+    carousel: [],
+  };
+
+  if (nomeNormalizado.includes("essencial")) {
+    return {
+      plano_id: 2,
+      ...estruturaBase,
+      message:
+        "🎉 Parabéns! Sua assinatura do Plano Essencial foi ativada com sucesso! Agora você tem acesso aos recursos básicos do MeuBolso.",
+      carousel: [
+        {
+          text: "📊 Controle Básico de Gastos - Organize suas finanças de forma simples e eficiente",
+          image:
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+        },
+        {
+          text: "📈 Relatórios Essenciais - Visualize seus gastos mensais e tome decisões financeiras conscientes",
+          image:
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+        },
+      ],
+    };
+  }
+
+  if (nomeNormalizado.includes("inteligente")) {
+    return {
+      plano_id: 3,
+      ...estruturaBase,
+      message:
+        "🚀 Excelente escolha! Sua assinatura do Plano Inteligente foi ativada! Você agora tem acesso a recursos avançados de controle financeiro.",
+      carousel: [
+        {
+          text: "🤖 IA Financeira - Análises inteligentes e sugestões personalizadas para otimizar seus gastos",
+          image:
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+        },
+        {
+          text: "📊 Relatórios Avançados - Dashboards detalhados com insights profundos sobre suas finanças",
+          image:
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+        },
+        {
+          text: "🎯 Metas Financeiras - Defina e acompanhe suas metas de economia com precisão",
+          image:
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+        },
+      ],
+    };
+  }
+
+  if (nomeNormalizado.includes("visionario")) {
+    return {
+      plano_id: 4,
+      ...estruturaBase,
+      message:
+        "👑 Incrível! Sua assinatura do Plano Visionário foi ativada! Você agora tem acesso completo a todos os recursos premium do MeuBolso.",
+      carousel: [
+        {
+          text: "💎 Recursos Premium - Acesso ilimitado a todas as funcionalidades avançadas da plataforma",
+          image:
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+        },
+        {
+          text: "🤖 IA Avançada - Análises preditivas e recomendações personalizadas para maximizar seus investimentos",
+          image:
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+        },
+        {
+          text: "📈 Dashboard Executivo - Visão 360° das suas finanças com métricas avançadas",
+          image:
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+        },
+        {
+          text: "🎯 Consultoria Personalizada - Suporte prioritário e análises personalizadas para seus objetivos",
+          image:
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+        },
+      ],
+    };
+  }
 
   return null; // Retorna null se não identificar o plano
 };
@@ -183,14 +264,16 @@ const buscarAssinaturaPorUsuario = async function (usuarioCodigo) {
       await historicoAssinaturaDAO.selectHistoricoByUsuario(usuarioCodigo);
 
     // A assinatura atual é sempre a última (mais recente) assinatura
-    const assinaturaAtual = todasAssinaturas && todasAssinaturas.length > 0 
-      ? todasAssinaturas[0] 
-      : null;
+    const assinaturaAtual =
+      todasAssinaturas && todasAssinaturas.length > 0
+        ? todasAssinaturas[0]
+        : null;
 
     // O histórico contém todas as assinaturas exceto a atual
-    const historico = todasAssinaturas && todasAssinaturas.length > 1
-      ? todasAssinaturas.slice(1)
-      : [];
+    const historico =
+      todasAssinaturas && todasAssinaturas.length > 1
+        ? todasAssinaturas.slice(1)
+        : [];
 
     return {
       status: MESSAGE.SUCCESS_REQUEST.status,
@@ -383,12 +466,13 @@ async function handleSubscriptionCreated(usuario, data, nowBrasilISO) {
   console.log("👤 Usuário ID:", usuario.id);
   console.log("🎯 Nome da oferta:", data.offer.name);
 
-  // Identificar plano_id pelo nome
-  const plano_id = mapearPlanoId(data.offer.name);
-  console.log("📊 Plano ID mapeado:", plano_id);
+  // Identificar plano_id e estrutura de mensagem pelo nome
+  const telefone = "+" + data.customer.phone;
+  const planoInfo = mapearPlanoId(data.offer.name, telefone);
+  console.log("📊 Plano mapeado:", planoInfo);
 
   // Validar se o plano foi identificado
-  if (!plano_id) {
+  if (!planoInfo) {
     console.error("❌ Plano não identificado. Nome recebido:", data.offer.name);
     return {
       status: false,
@@ -405,7 +489,7 @@ async function handleSubscriptionCreated(usuario, data, nowBrasilISO) {
     dataAssinatura: nowBrasilISO(),
     prazo: data.subscription.next_payment_date,
     plano_id_cakto: data.offer.id,
-    plano_id: plano_id,
+    plano_id: planoInfo.plano_id,
     is_cancelado: false,
   };
 
@@ -427,7 +511,7 @@ async function handleSubscriptionCreated(usuario, data, nowBrasilISO) {
   // Atualizar plano_id do usuário
   console.log("🔄 Atualizando plano do usuário...");
   const usuarioAtualizado = await usuarioDAO.updateUsuario(usuario.id, {
-    plano_id: plano_id,
+    plano_id: planoInfo.plano_id,
     status_plano: data.offer.name,
   });
 
@@ -441,12 +525,45 @@ async function handleSubscriptionCreated(usuario, data, nowBrasilISO) {
     console.error("❌ Erro ao atualizar usuário");
   }
 
+  // 7. Chamar webhook n8n para enviar carrossel
+  try {
+    const webhookUrl =
+      "https://n8n.srv1056458.hstgr.cloud/webhook/enviarCarrosel";
+
+    console.log("📞 [SUBSCRIPTION_CREATED] Chamando webhook n8n...");
+
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(planoInfo),
+    });
+
+    if (response.ok) {
+      console.log(
+        "✅ [SUBSCRIPTION_CREATED] Webhook carrossel enviado com sucesso",
+      );
+    } else {
+      console.error(
+        "⚠️ [SUBSCRIPTION_CREATED] Webhook retornou erro:",
+        response.status,
+      );
+    }
+  } catch (webhookError) {
+    console.error(
+      "⚠️ [SUBSCRIPTION_CREATED] Erro ao chamar webhook:",
+      webhookError,
+    );
+  }
+
   console.log("✅ SUBSCRIPTION_CREATED finalizado com sucesso\n");
   return {
     status: true,
     status_code: 201,
     message: "Assinatura criada com sucesso",
     historico: historico,
+    mensagem_usuario: planoInfo,
   };
 }
 
@@ -458,12 +575,13 @@ async function handleSubscriptionRenewed(usuario, data, nowBrasilISO) {
   console.log("👤 Usuário ID:", usuario.id);
   console.log("🎯 Nome da oferta:", data.offer.name);
 
-  // Identificar plano_id pelo nome
-  const plano_id = mapearPlanoId(data.offer.name);
-  console.log("📊 Plano ID mapeado:", plano_id);
+  // Identificar plano_id e estrutura de mensagem pelo nome
+  const telefone = "+" + data.customer.phone;
+  const planoInfo = mapearPlanoId(data.offer.name, telefone);
+  console.log("📊 Plano mapeado:", planoInfo);
 
   // Validar se o plano foi identificado
-  if (!plano_id) {
+  if (!planoInfo) {
     console.error("❌ Plano não identificado. Nome recebido:", data.offer.name);
     return {
       status: false,
@@ -480,7 +598,7 @@ async function handleSubscriptionRenewed(usuario, data, nowBrasilISO) {
     dataAssinatura: nowBrasilISO(),
     prazo: data.subscription.next_payment_date,
     plano_id_cakto: data.offer.id,
-    plano_id: plano_id,
+    plano_id: planoInfo.plano_id,
     is_cancelado: false,
   };
 
@@ -502,7 +620,7 @@ async function handleSubscriptionRenewed(usuario, data, nowBrasilISO) {
   // Atualizar plano_id do usuário
   console.log("🔄 Atualizando plano do usuário...");
   const usuarioAtualizado = await usuarioDAO.updateUsuario(usuario.id, {
-    plano_id: plano_id,
+    plano_id: planoInfo.plano_id,
     status_plano: data.offer.name,
   });
 
@@ -516,12 +634,54 @@ async function handleSubscriptionRenewed(usuario, data, nowBrasilISO) {
     console.error("❌ Erro ao atualizar usuário");
   }
 
+  // 7. Chamar webhook n8n para enviar carrossel
+  try {
+    const webhookUrl =
+      "https://n8n.srv1056458.hstgr.cloud/webhook/enviarCarrosel";
+
+    console.log("📞 [SUBSCRIPTION_RENEWED] Chamando webhook n8n...");
+
+    // Personalizar mensagem para renovação
+    const mensagemRenovacao = { ...planoInfo };
+    if (mensagemRenovacao.message.includes("ativada")) {
+      mensagemRenovacao.message = mensagemRenovacao.message.replace(
+        "foi ativada",
+        "foi renovada",
+      );
+    }
+
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(mensagemRenovacao),
+    });
+
+    if (response.ok) {
+      console.log(
+        "✅ [SUBSCRIPTION_RENEWED] Webhook carrossel enviado com sucesso",
+      );
+    } else {
+      console.error(
+        "⚠️ [SUBSCRIPTION_RENEWED] Webhook retornou erro:",
+        response.status,
+      );
+    }
+  } catch (webhookError) {
+    console.error(
+      "⚠️ [SUBSCRIPTION_RENEWED] Erro ao chamar webhook:",
+      webhookError,
+    );
+  }
+
   console.log("✅ SUBSCRIPTION_RENEWED finalizado com sucesso\n");
   return {
     status: true,
     status_code: 200,
     message: "Assinatura renovada com sucesso",
     historico: historico,
+    mensagem_usuario: planoInfo,
   };
 }
 
@@ -572,4 +732,5 @@ module.exports = {
   verificarAssinaturaAtiva,
   listarAssinaturas,
   webhookCakto,
+  mapearPlanoId,
 };
