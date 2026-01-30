@@ -9,6 +9,7 @@ const MESSAGE = require("../modulo/config.js");
 const authDAO = require("../model/DAO/auth.js");
 const usuarioDAO = require("../model/DAO/usuario.js");
 const historicoAssinaturaDAO = require("../model/DAO/historicoAssinatura.js");
+const { mapearPlanoId } = require("./assinatura/controllerAssinatura.js");
 
 /**
  * HELPER: Obter data/hora atual no horário de Brasília (UTC-3)
@@ -570,12 +571,19 @@ https://www.meubolsoia.com.br/dashboard/index.html?telefone=${encodeURIComponent
 
       mensagem = `Parabéns! Você ganhou 5 dias grátis do Plano Visionário.
 Acesse seu dashboard:
-https://www.fenontech.com.br/dashboard/index.html?telefone=${encodeURIComponent(dados.telefone)}&codigo=${codigo}`;
+https://www.meubolsoia.com.br/dashboard/index.html?telefone=${encodeURIComponent(dados.telefone)}&codigo=${codigo}`;
+
+      // Usar função mapearPlanoId para criar estrutura do carrossel
+      const mensagemCarrossel = mapearPlanoId("Visionário", dados.telefone);
+
+      // Personalizar mensagem para trial de 5 dias
+      mensagemCarrossel.message =
+        "🎉 Parabéns! Você ganhou 5 dias grátis do Plano Visionário! Aproveite todos os recursos premium sem custo.";
 
       // 6. Chamar webhook n8n
       try {
         const webhookUrl =
-          "https://n8n.srv1056458.hstgr.cloud/webhook/enviarMensagem";
+          "https://n8n.srv1056458.hstgr.cloud/webhook/enviarCarrosel";
 
         console.log("📞 [CADASTRO] Chamando webhook n8n...");
 
@@ -584,10 +592,7 @@ https://www.fenontech.com.br/dashboard/index.html?telefone=${encodeURIComponent(
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            telefone: dados.telefone,
-            mensagem: mensagem,
-          }),
+          body: JSON.stringify(mensagemCarrossel),
         });
 
         if (response.ok) {
