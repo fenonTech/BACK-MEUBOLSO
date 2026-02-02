@@ -42,14 +42,14 @@ const mapearPlanoId = function (nomePlano, telefoneUsuario = null) {
         "🎉 Parabéns! Sua assinatura do Plano Essencial foi ativada com sucesso! Agora você tem acesso aos recursos básicos do MeuBolso.",
       carousel: [
         {
-          text: "📊 Controle Básico de Gastos - Organize suas finanças de forma simples e eficiente",
+          text: "Seja bem vindo!",
           image:
-            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/planoessencial.png",
         },
         {
-          text: "📈 Relatórios Essenciais - Visualize seus gastos mensais e tome decisões financeiras conscientes",
+          text: "Como registar gastos?",
           image:
-            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/gastos.png",
         },
       ],
     };
@@ -63,19 +63,24 @@ const mapearPlanoId = function (nomePlano, telefoneUsuario = null) {
         "🚀 Excelente escolha! Sua assinatura do Plano Inteligente foi ativada! Você agora tem acesso a recursos avançados de controle financeiro.",
       carousel: [
         {
-          text: "🤖 IA Financeira - Análises inteligentes e sugestões personalizadas para otimizar seus gastos",
+          text: "Bem vindoo!",
           image:
-            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/planointeligente.png",
         },
         {
-          text: "📊 Relatórios Avançados - Dashboards detalhados com insights profundos sobre suas finanças",
+          text: "Como registar gastos?",
           image:
-            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/gastos.png",
         },
         {
-          text: "🎯 Metas Financeiras - Defina e acompanhe suas metas de economia com precisão",
+          text: "Como consultar relatórios?",
           image:
-            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/relatorio.png",
+        },
+        {
+          text: "Como funciona os lembretes?",
+          image:
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/lembretes.png",
         },
       ],
     };
@@ -89,24 +94,24 @@ const mapearPlanoId = function (nomePlano, telefoneUsuario = null) {
         "👑 Incrível! Sua assinatura do Plano Visionário foi ativada! Você agora tem acesso completo a todos os recursos premium do MeuBolso.",
       carousel: [
         {
-          text: "💎 Recursos Premium - Acesso ilimitado a todas as funcionalidades avançadas da plataforma",
+          text: "Bem vindo!",
           image:
-            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/planovisionario.png",
         },
         {
-          text: "🤖 IA Avançada - Análises preditivas e recomendações personalizadas para maximizar seus investimentos",
+          text: "Como registar gastos?",
           image:
-            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/gastos.png",
         },
         {
-          text: "📈 Dashboard Executivo - Visão 360° das suas finanças com métricas avançadas",
+          text: "Como consultar relatórios?",
           image:
-            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/relatorio.png",
         },
         {
-          text: "🎯 Consultoria Personalizada - Suporte prioritário e análises personalizadas para seus objetivos",
+          text: "Como funciona os lembretes?",
           image:
-            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/dashboard.png",
+            "https://fenon-meubolso.s3.us-east-1.amazonaws.com/fotos/lembretes.png",
         },
       ],
     };
