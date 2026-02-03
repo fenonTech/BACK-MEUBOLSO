@@ -87,7 +87,9 @@ async function processarMensagem(frase, user_id, telefone = null) {
         return {
           status: telefone ? "info" : "erro",
           status_code: telefone ? 200 : 400,
-          message: telefone ? "Mensagem de orientação enviada" : "Não consegui entender sua solicitação",
+          message: telefone
+            ? "Mensagem de orientação enviada"
+            : "Não consegui entender sua solicitação",
           mensagemEnviada: telefone ? true : false,
         };
     }
