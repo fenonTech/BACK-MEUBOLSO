@@ -1291,24 +1291,63 @@ function formatarMensagemDelecao(
     currency: "BRL",
   }).format(transacao.valor || 0);
 
-  // Tipo da transação
-  const tipo = transacao.is_entrada ? "📥 Entrada" : "📤 Saída";
+  // Data formatada
+  let dataFormatada;
+  const dataPagamento = transacao.data_pagamento;
 
-  const mensagem = ehUltimaTransacao
-    ? `✅ Última transação excluída com sucesso!
+  if (dataPagamento) {
+    try {
+      let dataObj;
 
-🆔 ID: ${transacao.codigo}
-${tipo}
+      // Se já vem com timezone (ex: "2026-02-05T00:00:00+00:00")
+      if (typeof dataPagamento === "string" && dataPagamento.includes("T")) {
+        // Extrair apenas a parte da data (YYYY-MM-DD) para evitar problemas de timezone
+        const dataString = dataPagamento.split("T")[0];
+        dataObj = new Date(dataString + "T12:00:00"); // Use meio-dia para evitar timezone issues
+      }
+      // Se é formato simples (YYYY-MM-DD)
+      else if (
+        typeof dataPagamento === "string" &&
+        dataPagamento.match(/^\d{4}-\d{2}-\d{2}$/)
+      ) {
+        dataObj = new Date(dataPagamento + "T12:00:00"); // Use meio-dia para evitar timezone issues
+      }
+      // Outros casos
+      else {
+        dataObj = new Date(dataPagamento);
+      }
+
+      if (!isNaN(dataObj.getTime())) {
+        dataFormatada = dataObj.toLocaleDateString("pt-BR");
+      } else {
+        // Fallback para hoje
+        dataFormatada = new Date().toLocaleDateString("pt-BR");
+      }
+    } catch (error) {
+      console.error("Erro ao formatar data_pagamento:", dataPagamento, error);
+      dataFormatada = new Date().toLocaleDateString("pt-BR");
+    }
+  } else {
+    dataFormatada = new Date().toLocaleDateString("pt-BR");
+  }
+
+  // Categoria
+  const categoria = transacao.tipo || "Outros";
+
+  // Título baseado se é última transação ou específica
+  const titulo = ehUltimaTransacao
+    ? "🔴 Última transação excluída"
+    : "🔴 Transação excluída";
+
+  return `${titulo}
+
+━━━━━━━━━━━━━━━━━━
+📝 Descrição: ${transacao.descricao || "Sem descrição"}
+🏷️ Categoria: ${categoria}
 💰 Valor: ${valorFormatado}
-📝 Descrição: ${transacao.descricao || "Sem descrição"}`
-    : `✅ Transação excluída com sucesso!
-
+📅 Pagamento: ${dataFormatada}
 🆔 ID: ${transacao.codigo}
-${tipo}
-💰 Valor: ${valorFormatado}
-📝 Descrição: ${transacao.descricao || "Sem descrição"}`;
-
-  return `${mensagem}${linkDashboard}`;
+━━━━━━━━━━━━━━━━━━${linkDashboard}`;
 }
 
 /**
