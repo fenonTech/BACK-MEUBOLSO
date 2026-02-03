@@ -57,11 +57,38 @@ async function processarMensagem(frase, user_id, telefone = null) {
       default:
         console.log("❓ Intenção não reconhecida ou fora de escopo");
 
+        // Mensagem educativa para o usuário
+        const mensagemOrientacao = `🤖 Não consegui entender sua solicitação.
+
+📝 *Aqui estão algumas coisas que posso ajudar:*
+
+💰 *Registrar gastos:*
+• "Gastei 50 reais com Uber"
+• "Paguei 120 reais na farmácia"
+• "Comprei pão por 8 reais"
+
+📊 *Consultar transações:*
+• "Quanto gastei essa semana?"
+• "Mostre meus gastos do mês"
+• "Qual foi meu saldo ontem?"
+
+📊 *Acessar dashboard:*
+• "Quero acessar meu painel"
+• "Envie o link do dashboard"
+
+💡 Tente reformular sua mensagem usando um desses exemplos!`;
+
+        // Enviar mensagem orientativa se houver telefone
+        if (telefone) {
+          console.log("📱 Enviando orientação sobre uso...");
+          await enviarMensagemWhatsApp(telefone, mensagemOrientacao);
+        }
+
         return {
           status: "erro",
           status_code: 400,
-          message:
-            "Não consegui entender sua solicitação. Tente reformular a mensagem.",
+          message: "Não consegui entender sua solicitação",
+          mensagemEnviada: telefone ? true : false,
         };
     }
   } catch (error) {
@@ -309,8 +336,136 @@ async function handlerRegistrarTransacao(frase, user_id, telefone) {
   if (temMultiplasTransacoes) {
     console.log("⚠️ Detectadas múltiplas transações na mensagem");
 
-    if (telefone) {
-      const mensagemOrientacao = `⚠️ Detectei que você está tentando registrar múltiplas transações de uma vez.
+    try {
+      // Chamar API para separar múltiplas transações
+      console.log("🔄 Chamando API para processar múltiplas transações...");
+      const response = await axios.post(
+        "https://n8n.srv1056458.hstgr.cloud/webhook/multitransacoes",
+        {
+          mensagem: frase,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          timeout: 15000, // 15 segundos para múltiplas transações
+        },
+      );
+
+      if (response.data && response.data.transacoes) {
+        let transacoesData;
+
+        // Parse da string JSON retornada
+        try {
+          transacoesData = JSON.parse(response.data.transacoes);
+        } catch (parseError) {
+          console.error("❌ Erro ao fazer parse das transações:", parseError);
+          throw new Error("Formato inválido de resposta da API");
+        }
+
+        if (
+          transacoesData.transacoes &&
+          Array.isArray(transacoesData.transacoes)
+        ) {
+          console.log(
+            `✅ ${transacoesData.transacoes.length} transações separadas pela IA`,
+          );
+
+          const resultados = [];
+          const transacoesSucesso = [];
+          let erros = 0;
+
+          // Processar cada transação individualmente
+          for (const [
+            index,
+            transacao,
+          ] of transacoesData.transacoes.entries()) {
+            try {
+              console.log(
+                `📝 Processando transação ${index + 1}:`,
+                transacao.mensagem,
+              );
+
+              // Processar cada transação como uma mensagem individual (sem telefone para evitar múltiplas mensagens)
+              const resultado = await handlerRegistrarTransacao(
+                transacao.mensagem,
+                user_id,
+                null,
+              );
+
+              resultados.push({
+                mensagem: transacao.mensagem,
+                resultado: resultado,
+              });
+
+              if (resultado.status_code === 201) {
+                transacoesSucesso.push({
+                  transacao: resultado.transacao,
+                  mensagem: transacao.mensagem,
+                });
+              } else {
+                erros++;
+                console.error(
+                  `❌ Erro ao processar transação ${index + 1}:`,
+                  resultado.message,
+                );
+              }
+            } catch (error) {
+              erros++;
+              console.error(
+                `❌ Erro ao processar transação ${index + 1}:`,
+                error.message,
+              );
+              resultados.push({
+                mensagem: transacao.mensagem,
+                erro: error.message,
+              });
+            }
+          }
+
+          // Enviar resumo das transações processadas se houver telefone
+          if (telefone && transacoesSucesso.length > 0) {
+            // Gerar código temporário para o link do dashboard
+            const codigo = authDAO.gerarCodigoTemp();
+            const codigoArmazenado = await authDAO.armazenarCodigo(
+              telefone,
+              codigo,
+              false,
+            );
+
+            const mensagemResumo = formatarMensagemMultiplasTransacoes(
+              transacoesSucesso,
+              erros,
+              telefone,
+              codigoArmazenado ? codigo : null,
+            );
+
+            console.log("📱 Enviando resumo das múltiplas transações...");
+            await enviarMensagemWhatsApp(telefone, mensagemResumo);
+          }
+
+          return {
+            status: transacoesSucesso.length > 0 ? "sucesso" : "erro",
+            status_code: transacoesSucesso.length > 0 ? 201 : 400,
+            message: `${transacoesSucesso.length} transações registradas com sucesso${erros > 0 ? `, ${erros} falharam` : ""}`,
+            transacoes: transacoesSucesso,
+            resultados: resultados,
+            mensagemEnviada: telefone ? true : false,
+          };
+        }
+      }
+
+      // Se chegou até aqui, houve problema com a resposta da API
+      throw new Error("Resposta inválida da API de múltiplas transações");
+    } catch (error) {
+      console.error(
+        "❌ Erro ao processar múltiplas transações:",
+        error.message,
+      );
+
+      // Fallback: enviar mensagem de orientação original
+      if (telefone) {
+        const mensagemOrientacao = `⚠️ Detectei múltiplas transações, mas houve um problema ao processá-las.
 
 📝 *Por favor, registre uma transação por vez:*
 
@@ -320,15 +475,16 @@ Exemplo correto:
 
 Isso me ajuda a registrar corretamente cada gasto ou entrada! 😊`;
 
-      await enviarMensagemWhatsApp(telefone, mensagemOrientacao);
-    }
+        await enviarMensagemWhatsApp(telefone, mensagemOrientacao);
+      }
 
-    return {
-      status: "info",
-      status_code: 200,
-      message: "Por favor, registre uma transação por vez",
-      mensagemEnviada: true,
-    };
+      return {
+        status: "erro",
+        status_code: 500,
+        message: "Erro ao processar múltiplas transações",
+        mensagemEnviada: telefone ? true : false,
+      };
+    }
   }
 
   // Interpreta os componentes da transação
@@ -980,9 +1136,45 @@ function formatarMensagemTransacao(
     currency: "BRL",
   }).format(valor || 0);
 
-  const dataFormatada = new Date(data + "T00:00:00").toLocaleDateString(
-    "pt-BR",
-  );
+  // Data formatada com validação (prioriza data_pagamento da transação)
+  let dataFormatada;
+  const dataPagamento = transacao.data_pagamento || data;
+
+  if (dataPagamento) {
+    try {
+      let dataObj;
+
+      // Se já vem com timezone (ex: "2026-02-05T00:00:00+00:00")
+      if (typeof dataPagamento === "string" && dataPagamento.includes("T")) {
+        // Extrair apenas a parte da data (YYYY-MM-DD) para evitar problemas de timezone
+        const dataString = dataPagamento.split("T")[0];
+        dataObj = new Date(dataString + "T12:00:00"); // Use meio-dia para evitar timezone issues
+      }
+      // Se é formato simples (YYYY-MM-DD)
+      else if (
+        typeof dataPagamento === "string" &&
+        dataPagamento.match(/^\d{4}-\d{2}-\d{2}$/)
+      ) {
+        dataObj = new Date(dataPagamento + "T12:00:00"); // Use meio-dia para evitar timezone issues
+      }
+      // Outros casos
+      else {
+        dataObj = new Date(dataPagamento);
+      }
+
+      if (!isNaN(dataObj.getTime())) {
+        dataFormatada = dataObj.toLocaleDateString("pt-BR");
+      } else {
+        // Fallback para hoje
+        dataFormatada = new Date().toLocaleDateString("pt-BR");
+      }
+    } catch (error) {
+      console.error("Erro ao formatar data_pagamento:", dataPagamento, error);
+      dataFormatada = new Date().toLocaleDateString("pt-BR");
+    }
+  } else {
+    dataFormatada = new Date().toLocaleDateString("pt-BR");
+  }
 
   // O ID pode estar como 'id' ou 'codigo' dependendo do retorno do banco
   const idTransacao = transacao.codigo || transacao.id || "N/A";
@@ -1040,6 +1232,113 @@ ${tipo}
 📝 Descrição: ${transacao.descricao || "Sem descrição"}`;
 
   return `${mensagem}${linkDashboard}`;
+}
+
+/**
+ * Formata mensagem de resumo para múltiplas transações
+ */
+function formatarMensagemMultiplasTransacoes(
+  transacoesSucesso,
+  erros,
+  telefone,
+  codigo,
+) {
+  const total = transacoesSucesso.length;
+  const valorTotal = transacoesSucesso.reduce(
+    (acc, item) => acc + (item.transacao.valor || 0),
+    0,
+  );
+  const valorTotalFormatado = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(valorTotal);
+
+  let mensagem = `✅ *${total} transações registradas com sucesso!*\n\n`;
+
+  // Listar transações (máximo 5 para não ficar muito longo)
+  const transacoesParaMostrar = transacoesSucesso.slice(0, 5);
+  transacoesParaMostrar.forEach((item, index) => {
+    const valor = new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(item.transacao.valor || 0);
+
+    const tipoEmoji = item.transacao.is_entrada ? "📥" : "📤";
+    const tipoTexto = item.transacao.is_entrada ? "Entrada" : "Saída";
+    const id = item.transacao.codigo || item.transacao.id || "N/A";
+
+    // Data formatada (sempre mostrar data_pagamento) - com validação
+    let dataFormatada;
+    const dataPagamento = item.transacao.data_pagamento;
+
+    if (dataPagamento) {
+      try {
+        let dataObj;
+
+        // Se já vem com timezone (ex: "2026-02-05T00:00:00+00:00")
+        if (typeof dataPagamento === "string" && dataPagamento.includes("T")) {
+          // Extrair apenas a parte da data (YYYY-MM-DD) para evitar problemas de timezone
+          const dataString = dataPagamento.split("T")[0];
+          dataObj = new Date(dataString + "T12:00:00"); // Use meio-dia para evitar timezone issues
+        }
+        // Se é formato simples (YYYY-MM-DD)
+        else if (
+          typeof dataPagamento === "string" &&
+          dataPagamento.match(/^\d{4}-\d{2}-\d{2}$/)
+        ) {
+          dataObj = new Date(dataPagamento + "T12:00:00"); // Use meio-dia para evitar timezone issues
+        }
+        // Outros casos
+        else {
+          dataObj = new Date(dataPagamento);
+        }
+
+        if (!isNaN(dataObj.getTime())) {
+          dataFormatada = dataObj.toLocaleDateString("pt-BR");
+        } else {
+          // Fallback para hoje
+          dataFormatada = new Date().toLocaleDateString("pt-BR");
+        }
+      } catch (error) {
+        console.error("Erro ao formatar data_pagamento:", dataPagamento, error);
+        dataFormatada = new Date().toLocaleDateString("pt-BR");
+      }
+    } else {
+      // Se não tem data_pagamento, usar hoje
+      dataFormatada = new Date().toLocaleDateString("pt-BR");
+    }
+
+    // Categoria com emoji (se disponível)
+    const categoria = item.transacao.tipo ? ` — 🏷️ ${item.transacao.tipo}` : "";
+
+    // Primeira linha: bullet + tipo + valor + categoria
+    mensagem += `${tipoEmoji} ${tipoTexto} ${valor}${categoria}\n`;
+
+    // Segunda linha: ID e data
+    mensagem += `🆔 ID: ${id} | 📅 ${dataFormatada}\n`;
+
+    // Terceira linha: descrição
+    mensagem += `📝 ${item.mensagem}\n\n`;
+  });
+
+  // Se há mais transações, indicar
+  if (transacoesSucesso.length > 5) {
+    mensagem += `... e mais ${transacoesSucesso.length - 5} transações\n\n`;
+  }
+
+  mensagem += `💰 *Valor total processado: ${valorTotalFormatado}*`;
+
+  // Informar sobre erros se houver
+  if (erros > 0) {
+    mensagem += `\n\n⚠️ ${erros} transação(ões) não puderam ser processadas.`;
+  }
+
+  // Link do dashboard
+  if (codigo) {
+    mensagem += `\n\n📊 Visualize todas as suas transações no dashboard:\nhttps://www.meubolsoia.com.br/dashboard/index.html?telefone=${encodeURIComponent(telefone)}&codigo=${codigo}`;
+  }
+
+  return mensagem;
 }
 
 /**
