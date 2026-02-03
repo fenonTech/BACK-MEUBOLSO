@@ -65,7 +65,7 @@ router.post("/auth/login", async (request, response) => {
 
 router.get("/auth/validar-assinatura/:telefone", async (request, response) => {
   let telefone = request.params.telefone;
-
+  0;
   let resultado = await controllerAuth.validarAssinatura(
     { telefone },
     "application/json",
