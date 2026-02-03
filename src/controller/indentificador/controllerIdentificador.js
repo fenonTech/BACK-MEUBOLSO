@@ -332,161 +332,157 @@ async function handlerRegistrarTransacao(frase, user_id, telefone) {
   const numeros = extrairNumeros(frase);
   console.log("🔢 Números extraídos:", numeros);
 
-  // Detectar múltiplas transações (mais de 2 valores ou múltiplas conjunções)
-  const temMultiplasTransacoes = detectarMultiplasTransacoes(frase, numeros);
+  // Enviar mensagem inicial de feedback (sempre, independente de ser uma ou múltiplas)
+  if (telefone) {
+    const mensagemInicial = `✨ Já estamos registrando, aguarde um momentinho...`;
+    console.log("📱 Enviando mensagem inicial de processamento...");
+    await enviarMensagemWhatsApp(telefone, mensagemInicial);
+  }
 
-  if (temMultiplasTransacoes) {
-    console.log("⚠️ Detectadas múltiplas transações na mensagem");
-
-    try {
-      // Chamar API para separar múltiplas transações
-      console.log("🔄 Chamando API para processar múltiplas transações...");
-      const response = await axios.post(
-        "https://n8n.srv1056458.hstgr.cloud/webhook/multitransacoes",
-        {
-          mensagem: frase,
+  // Sempre chamar API para processar transações (uma ou múltiplas)
+  try {
+    console.log("🔄 Chamando API para processar múltiplas transações...");
+    const response = await axios.post(
+      "https://n8n.srv1056458.hstgr.cloud/webhook/multitransacoes",
+      {
+        mensagem: frase,
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
         },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          timeout: 15000, // 15 segundos para múltiplas transações
-        },
-      );
+        timeout: 15000, // 15 segundos para múltiplas transações
+      },
+    );
 
-      if (response.data && response.data.transacoes) {
-        let transacoesData;
+    if (response.data && response.data.transacoes) {
+      let transacoesData;
 
-        // Parse da string JSON retornada
-        try {
-          transacoesData = JSON.parse(response.data.transacoes);
-        } catch (parseError) {
-          console.error("❌ Erro ao fazer parse das transações:", parseError);
-          throw new Error("Formato inválido de resposta da API");
-        }
+      // Parse da string JSON retornada
+      try {
+        transacoesData = JSON.parse(response.data.transacoes);
+      } catch (parseError) {
+        console.error("❌ Erro ao fazer parse das transações:", parseError);
+        throw new Error("Formato inválido de resposta da API");
+      }
 
-        if (
-          transacoesData.transacoes &&
-          Array.isArray(transacoesData.transacoes)
-        ) {
-          console.log(
-            `✅ ${transacoesData.transacoes.length} transações separadas pela IA`,
-          );
+      if (
+        transacoesData.transacoes &&
+        Array.isArray(transacoesData.transacoes) &&
+        transacoesData.transacoes.length > 1
+      ) {
+        console.log(
+          `✅ ${transacoesData.transacoes.length} transações separadas pela IA`,
+        );
 
-          const resultados = [];
-          const transacoesSucesso = [];
-          let erros = 0;
+        const resultados = [];
+        const transacoesSucesso = [];
+        let erros = 0;
 
-          // Processar cada transação individualmente
-          for (const [
-            index,
-            transacao,
-          ] of transacoesData.transacoes.entries()) {
-            try {
-              console.log(
-                `📝 Processando transação ${index + 1}:`,
-                transacao.mensagem,
-              );
+        // Interpretar data uma vez da mensagem original (preserva contexto temporal)
+        const dataOriginal = await interpretarData(frase, numeros);
+        console.log("📅 Data extraída da mensagem original:", dataOriginal);
 
-              // Processar cada transação como uma mensagem individual (sem telefone para evitar múltiplas mensagens)
-              const resultado = await handlerRegistrarTransacao(
-                transacao.mensagem,
-                user_id,
-                null,
-              );
+        // Processar cada transação individualmente
+        for (const [index, transacao] of transacoesData.transacoes.entries()) {
+          try {
+            console.log(
+              `📝 Processando transação ${index + 1}:`,
+              transacao.mensagem,
+            );
 
-              resultados.push({
+            // Processar transação individual diretamente (sem recursão)
+            const resultado = await processarTransacaoIndividual(
+              transacao.mensagem,
+              user_id,
+              dataOriginal,
+            );
+
+            resultados.push({
+              mensagem: transacao.mensagem,
+              resultado: resultado,
+            });
+
+            if (resultado.status_code === 201) {
+              transacoesSucesso.push({
+                transacao: resultado.transacao,
                 mensagem: transacao.mensagem,
-                resultado: resultado,
               });
-
-              if (resultado.status_code === 201) {
-                transacoesSucesso.push({
-                  transacao: resultado.transacao,
-                  mensagem: transacao.mensagem,
-                });
-              } else {
-                erros++;
-                console.error(
-                  `❌ Erro ao processar transação ${index + 1}:`,
-                  resultado.message,
-                );
-              }
-            } catch (error) {
+            } else {
               erros++;
               console.error(
                 `❌ Erro ao processar transação ${index + 1}:`,
-                error.message,
+                resultado.message,
               );
-              resultados.push({
-                mensagem: transacao.mensagem,
-                erro: error.message,
-              });
             }
-          }
-
-          // Enviar resumo das transações processadas se houver telefone
-          if (telefone && transacoesSucesso.length > 0) {
-            // Gerar código temporário para o link do dashboard
-            const codigo = authDAO.gerarCodigoTemp();
-            const codigoArmazenado = await authDAO.armazenarCodigo(
-              telefone,
-              codigo,
-              false,
+          } catch (error) {
+            erros++;
+            console.error(
+              `❌ Erro ao processar transação ${index + 1}:`,
+              error.message,
             );
-
-            const mensagemResumo = formatarMensagemMultiplasTransacoes(
-              transacoesSucesso,
-              erros,
-              telefone,
-              codigoArmazenado ? codigo : null,
-            );
-
-            console.log("📱 Enviando resumo das múltiplas transações...");
-            await enviarMensagemWhatsApp(telefone, mensagemResumo);
+            resultados.push({
+              mensagem: transacao.mensagem,
+              erro: error.message,
+            });
           }
-
-          return {
-            status: transacoesSucesso.length > 0 ? "sucesso" : "erro",
-            status_code: transacoesSucesso.length > 0 ? 201 : 400,
-            message: `${transacoesSucesso.length} transações registradas com sucesso${erros > 0 ? `, ${erros} falharam` : ""}`,
-            transacoes: transacoesSucesso,
-            resultados: resultados,
-            mensagemEnviada: telefone ? true : false,
-          };
         }
+
+        // Enviar resumo das transações processadas se houver telefone
+        if (telefone && transacoesSucesso.length > 0) {
+          // Gerar código temporário para o link do dashboard
+          const codigo = authDAO.gerarCodigoTemp();
+          const codigoArmazenado = await authDAO.armazenarCodigo(
+            telefone,
+            codigo,
+            false,
+          );
+
+          const mensagemResumo = formatarMensagemMultiplasTransacoes(
+            transacoesSucesso,
+            erros,
+            telefone,
+            codigoArmazenado ? codigo : null,
+          );
+
+          console.log("📱 Enviando resumo das múltiplas transações...");
+          await enviarMensagemWhatsApp(telefone, mensagemResumo);
+        }
+
+        return {
+          status: transacoesSucesso.length > 0 ? "sucesso" : "erro",
+          status_code: transacoesSucesso.length > 0 ? 201 : 400,
+          message: `${transacoesSucesso.length} transações registradas com sucesso${erros > 0 ? `, ${erros} falharam` : ""}`,
+          transacoes: transacoesSucesso,
+          resultados: resultados,
+          mensagemEnviada: telefone ? true : false,
+        };
+      } else if (
+        transacoesData.transacoes &&
+        Array.isArray(transacoesData.transacoes) &&
+        transacoesData.transacoes.length === 1
+      ) {
+        console.log(
+          "✅ Uma transação retornada pela API, processando diretamente...",
+        );
+        // Para uma única transação, usar a mensagem original ou a processada
+        const transacaoUnica = transacoesData.transacoes[0];
+        frase = transacaoUnica.mensagem || frase;
+        console.log("📝 Mensagem para processar:", frase);
+        // Continua para o processamento normal abaixo
       }
-
-      // Se chegou até aqui, houve problema com a resposta da API
-      throw new Error("Resposta inválida da API de múltiplas transações");
-    } catch (error) {
-      console.error(
-        "❌ Erro ao processar múltiplas transações:",
-        error.message,
-      );
-
-      // Fallback: enviar mensagem de orientação original
-      if (telefone) {
-        const mensagemOrientacao = `⚠️ Detectei múltiplas transações, mas houve um problema ao processá-las.
-
-📝 *Por favor, registre uma transação por vez:*
-
-Exemplo correto:
-• "Gastei 50 reais com Uber"
-• "Gastei 60 reais com pão"
-
-Isso me ajuda a registrar corretamente cada gasto ou entrada! 😊`;
-
-        await enviarMensagemWhatsApp(telefone, mensagemOrientacao);
-      }
-
-      return {
-        status: "erro",
-        status_code: 500,
-        message: "Erro ao processar múltiplas transações",
-        mensagemEnviada: telefone ? true : false,
-      };
     }
+
+    // Se chegou até aqui e não houve múltiplas transações, continua com processamento normal
+    console.log("📝 Processando como transação única...");
+  } catch (error) {
+    console.error(
+      "❌ Erro ao chamar API de múltiplas transações:",
+      error.message,
+    );
+
+    // Em caso de erro na API, continua com processamento normal
+    console.log("⚠️ Fallback: processando como transação única...");
   }
 
   // Interpreta os componentes da transação
@@ -846,6 +842,83 @@ async function handlerAtualizarTransacao(frase, user_id) {
 }
 
 /**
+ * Processa uma transação individual sem recursão na API
+ * Usado para múltiplas transações onde pode haver datas específicas
+ */
+async function processarTransacaoIndividual(frase, user_id, dataOriginal) {
+  console.log("💾 [INDIVIDUAL] Processando transação individual");
+  console.log("📝 Frase:", frase);
+  console.log("📅 Data original:", dataOriginal);
+
+  // Extrai números da mensagem individual
+  const numeros = extrairNumeros(frase);
+  console.log("🔢 Números extraídos:", numeros);
+
+  // Primeiro tenta interpretar data específica da transação individual
+  let dataPagamento;
+  try {
+    dataPagamento = await interpretarData(frase, numeros);
+    console.log("📅 Data interpretada da transação individual:", dataPagamento);
+
+    // Se a data interpretada é "hoje" mas temos uma data original diferente,
+    // e a mensagem individual não tem indicadores de "hoje", usar a original
+    const hoje = new Date().toISOString().split("T")[0];
+    const fraseNormalizada = frase.toLowerCase();
+
+    if (
+      dataPagamento === hoje &&
+      dataOriginal !== hoje &&
+      !fraseNormalizada.includes("hoje") &&
+      !fraseNormalizada.includes("agora")
+    ) {
+      console.log("📅 Usando data original como fallback:", dataOriginal);
+      dataPagamento = dataOriginal;
+    }
+  } catch (error) {
+    console.log(
+      "📅 Erro ao interpretar data individual, usando original:",
+      error.message,
+    );
+    dataPagamento = dataOriginal;
+  }
+
+  // Interpreta componentes da transação individual
+  let valor = await interpretarValor(frase, numeros);
+  const is_entrada = await interpretarTipo(frase);
+
+  // Se o valor vier com múltiplos valores separados por |, somar todos
+  if (typeof valor === "string" && valor.includes("|")) {
+    console.log("🔢 Múltiplos valores detectados, somando:", valor);
+    const valores = valor.split("|").map((v) => parseFloat(v.trim()));
+    valor = valores.reduce((acc, v) => acc + v, 0);
+    console.log("💰 Valor total após soma:", valor);
+  }
+
+  console.log("📊 Dados interpretados (individual):", {
+    dataPagamento,
+    valor,
+    is_entrada,
+  });
+
+  // Monta payload da transação
+  const payloadTransacao = montarPayload(user_id, frase, {
+    dataPagamento,
+    valor,
+    is_entrada,
+  });
+
+  // Insere a transação no banco de dados
+  console.log("💾 Inserindo transação individual no banco de dados...");
+  const resultado = await controllerTransacao.inserirTransacao(
+    payloadTransacao,
+    "application/json",
+  );
+
+  console.log("📊 Resultado da inserção individual:", resultado);
+  return resultado;
+}
+
+/**
  * Interpreta a data da mensagem
  */
 async function interpretarData(frase, numeros) {
@@ -1182,19 +1255,21 @@ function formatarMensagemTransacao(
   const idTransacao = transacao.codigo || transacao.id || "N/A";
 
   // Categoria (se disponível)
-  const categoria = transacao.tipo ? `\n🏷️ Categoria: ${transacao.tipo}` : "";
+  const categoria = transacao.tipo || "Sem categoria";
 
   const linkDashboard = codigo
     ? `\n\n📊 Para visualizar melhor seus gastos e entradas, utilize o dashboard:\nhttps://www.meubolsoia.com.br/dashboard/index.html?telefone=${encodeURIComponent(telefone)}&codigo=${codigo}`
     : "";
 
-  return `✅ Transação registrada com sucesso!
+  return `🟢 Transação registrada
 
-🆔 ID: ${idTransacao}
-💸 Tipo: ${tipo}
+━━━━━━━━━━━━━━
+📝 Descrição: ${descricao}
+🏷️ Categoria: ${categoria}
 💰 Valor: ${valorFormatado}
-📅 Data: ${dataFormatada}
-📝 Descrição: ${descricao}${categoria}${linkDashboard}`;
+📅 Pagamento: ${dataFormatada}
+🆔 ID: ${idTransacao}
+━━━━━━━━━━━━━━${linkDashboard}`;
 }
 
 /**
@@ -1255,18 +1330,16 @@ function formatarMensagemMultiplasTransacoes(
     currency: "BRL",
   }).format(valorTotal);
 
-  let mensagem = `✅ *${total} transações registradas com sucesso!*\n\n`;
+  let mensagem = `🟢 Transações registradas\n\n`;
 
-  // Listar transações (máximo 5 para não ficar muito longo)
-  const transacoesParaMostrar = transacoesSucesso.slice(0, 5);
+  // Listar transações (máximo 10 para não ficar muito longo)
+  const transacoesParaMostrar = transacoesSucesso.slice(0, 10);
   transacoesParaMostrar.forEach((item, index) => {
     const valor = new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency: "BRL",
     }).format(item.transacao.valor || 0);
 
-    const tipoEmoji = item.transacao.is_entrada ? "📥" : "📤";
-    const tipoTexto = item.transacao.is_entrada ? "Entrada" : "Saída";
     const id = item.transacao.codigo || item.transacao.id || "N/A";
 
     // Data formatada (sempre mostrar data_pagamento) - com validação
@@ -1310,32 +1383,30 @@ function formatarMensagemMultiplasTransacoes(
       dataFormatada = new Date().toLocaleDateString("pt-BR");
     }
 
-    // Categoria com emoji (se disponível)
-    const categoria = item.transacao.tipo ? ` — 🏷️ ${item.transacao.tipo}` : "";
+    // Categoria
+    const categoria = item.transacao.tipo || "Outros";
 
-    // Primeira linha: bullet + tipo + valor + categoria
-    mensagem += `${tipoEmoji} ${tipoTexto} ${valor}${categoria}\n`;
+    // Formato com emojis e linhas
+    mensagem += `━━━━━━━━━━━━━━\n`;
+    mensagem += `📝 Descrição: ${item.mensagem}\n`;
+    mensagem += `🏷️ Categoria: ${categoria}\n`;
+    mensagem += `💰 Valor: ${valor}\n`;
+    mensagem += `📅 Pagamento: ${dataFormatada}\n`;
+    mensagem += `🆔 ID: ${id}\n`;
+    mensagem += `━━━━━━━━━━━━━━`;
 
-    // Segunda linha: ID e data
-    mensagem += `🆔 ID: ${id} | 📅 ${dataFormatada}\n`;
-
-    // Terceira linha: descrição
-    mensagem += `📝 ${item.mensagem}\n\n`;
+    // Quebra de linha entre transações (exceto na última)
+    if (index < transacoesParaMostrar.length - 1) {
+      mensagem += `\n\n`;
+    }
   });
 
   // Se há mais transações, indicar
-  if (transacoesSucesso.length > 5) {
-    mensagem += `... e mais ${transacoesSucesso.length - 5} transações\n\n`;
+  if (transacoesSucesso.length > 10) {
+    mensagem += `\n... e mais ${transacoesSucesso.length - 10} transações\n`;
   }
 
-  mensagem += `💰 *Valor total processado: ${valorTotalFormatado}*`;
-
-  // Informar sobre erros se houver
-  if (erros > 0) {
-    mensagem += `\n\n⚠️ ${erros} transação(ões) não puderam ser processadas.`;
-  }
-
-  // Link do dashboard
+  // Link do dashboard (só no final, após a última transação)
   if (codigo) {
     mensagem += `\n\n📊 Visualize todas as suas transações no dashboard:\nhttps://www.meubolsoia.com.br/dashboard/index.html?telefone=${encodeURIComponent(telefone)}&codigo=${codigo}`;
   }
