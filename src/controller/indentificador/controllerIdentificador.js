@@ -1341,13 +1341,13 @@ function formatarMensagemDelecao(
 
   return `${titulo}
 
-━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━
 📝 Descrição: ${transacao.descricao || "Sem descrição"}
 🏷️ Categoria: ${categoria}
 💰 Valor: ${valorFormatado}
 📅 Pagamento: ${dataFormatada}
 🆔 ID: ${transacao.codigo}
-━━━━━━━━━━━━━━━━━━${linkDashboard}`;
+━━━━━━━━━━━━━━${linkDashboard}`;
 }
 
 /**
