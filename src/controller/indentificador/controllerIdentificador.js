@@ -332,14 +332,6 @@ async function handlerRegistrarTransacao(frase, user_id, telefone) {
   const numeros = extrairNumeros(frase);
   console.log("🔢 Números extraídos:", numeros);
 
-  // Enviar mensagem inicial de feedback (sempre, independente de ser uma ou múltiplas)
-  if (telefone) {
-    const mensagemInicial = `✨ Já estamos registrando, aguarde um momentinho...`;
-    console.log("📱 Enviando mensagem inicial de processamento...");
-    await enviarMensagemWhatsApp(telefone, mensagemInicial);
-  }
-
-  // Sempre chamar API para processar transações (uma ou múltiplas)
   try {
     console.log("🔄 Chamando API para processar múltiplas transações...");
     const response = await axios.post(
