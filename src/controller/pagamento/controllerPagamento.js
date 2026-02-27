@@ -1,5 +1,5 @@
 /**************************************************************************
- * Objetivo: Controller para integração com Abacate Pay
+ * Objetivo: Controller para integração com Abacate Pay (somente cartão)
  * Data: 27/02/2026
  * Autor: Codex
  **************************************************************************/
@@ -8,17 +8,6 @@ const axios = require("axios");
 
 const ABACATEPAY_BASE_URL =
   process.env.ABACATEPAY_BASE_URL || "https://api.abacatepay.com/v1";
-
-const PAYMENT_METHODS = {
-  pix: ["PIX"],
-  cartao: ["CREDIT_CARD"],
-  ambos: ["PIX", "CREDIT_CARD"],
-};
-
-const parsePaymentMethods = (metodoPagamento) => {
-  if (!metodoPagamento) return PAYMENT_METHODS.ambos;
-  return PAYMENT_METHODS[metodoPagamento] || null;
-};
 
 const onlyDefined = (obj) =>
   Object.fromEntries(
@@ -34,42 +23,6 @@ const getCommonHeaders = () => {
     Authorization: `Bearer ${apiKey}`,
     "Content-Type": "application/json",
   };
-};
-
-const buildBillingPayload = (dadosPagamento, methods) => {
-  const {
-    external_id,
-    nome_produto,
-    descricao,
-    quantidade,
-    valor_centavos,
-    email,
-    nome,
-    celular,
-    cpf_cnpj,
-    retorno_url,
-  } = dadosPagamento || {};
-
-  return onlyDefined({
-    frequency: "ONE_TIME",
-    methods,
-    products: [
-      {
-        externalId: external_id || `pedido_${Date.now()}`,
-        name: nome_produto,
-        description: descricao || nome_produto,
-        quantity: Number(quantidade || 1),
-        price: Number(valor_centavos),
-      },
-    ],
-    customer: onlyDefined({
-      name: nome,
-      email,
-      cellphone: celular,
-      taxId: cpf_cnpj,
-    }),
-    returnUrl: retorno_url,
-  });
 };
 
 const validateContentTypeAndApiKey = (contentType) => {
@@ -93,7 +46,7 @@ const validateContentTypeAndApiKey = (contentType) => {
   return null;
 };
 
-const validateBillingInput = (dadosPagamento) => {
+const validateCardInput = (dadosPagamento) => {
   const { nome_produto, valor_centavos, email, nome, cpf_cnpj } =
     dadosPagamento || {};
 
@@ -117,43 +70,6 @@ const validateBillingInput = (dadosPagamento) => {
   return null;
 };
 
-const validatePixInput = (dadosPagamento) => {
-  const amount = Number(dadosPagamento?.amount || dadosPagamento?.valor_centavos);
-  const hasAnyCustomerField =
-    dadosPagamento?.nome ||
-    dadosPagamento?.cellphone ||
-    dadosPagamento?.celular ||
-    dadosPagamento?.email ||
-    dadosPagamento?.cpf_cnpj ||
-    dadosPagamento?.taxId;
-
-  if (Number.isNaN(amount) || amount <= 0) {
-    return {
-      status: false,
-      status_code: 400,
-      message: "amount (ou valor_centavos) deve ser um número maior que zero.",
-    };
-  }
-
-  if (hasAnyCustomerField) {
-    const name = dadosPagamento?.nome || dadosPagamento?.name;
-    const cellphone = dadosPagamento?.cellphone || dadosPagamento?.celular;
-    const email = dadosPagamento?.email;
-    const taxId = dadosPagamento?.taxId || dadosPagamento?.cpf_cnpj;
-
-    if (!name || !cellphone || !email || !taxId) {
-      return {
-        status: false,
-        status_code: 400,
-        message:
-          "Ao informar customer, os campos nome/name, cellphone/celular, email e taxId/cpf_cnpj são obrigatórios.",
-      };
-    }
-  }
-
-  return null;
-};
-
 const extractErrorMessage = (error) => {
   const data = error?.response?.data;
 
@@ -171,8 +87,48 @@ const extractErrorMessage = (error) => {
   );
 };
 
-const createBilling = async (dadosPagamento, methods) => {
-  const payload = buildBillingPayload(dadosPagamento, methods);
+const buildCardPayload = (dadosPagamento) => {
+  const {
+    external_id,
+    nome_produto,
+    descricao,
+    quantidade,
+    valor_centavos,
+    email,
+    nome,
+    celular,
+    cpf_cnpj,
+    retorno_url,
+    completion_url,
+    customer_id,
+  } = dadosPagamento || {};
+
+  return onlyDefined({
+    frequency: "ONE_TIME",
+    methods: ["CARD"],
+    products: [
+      {
+        externalId: external_id || `prod_${Date.now()}`,
+        name: nome_produto,
+        description: descricao || nome_produto,
+        quantity: Number(quantidade || 1),
+        price: Number(valor_centavos),
+      },
+    ],
+    returnUrl: retorno_url,
+    completionUrl: completion_url,
+    customerId: customer_id,
+    customer: onlyDefined({
+      name: nome,
+      cellphone: celular,
+      email,
+      taxId: cpf_cnpj,
+    }),
+  });
+};
+
+const createCardBilling = async (dadosPagamento) => {
+  const payload = buildCardPayload(dadosPagamento);
 
   const response = await axios.post(
     `${ABACATEPAY_BASE_URL}/billing/create`,
@@ -186,135 +142,37 @@ const createBilling = async (dadosPagamento, methods) => {
   return {
     status: true,
     status_code: 201,
-    message: "Pagamento criado com sucesso",
+    message: "Pagamento com cartão criado com sucesso",
     pagamento: response.data,
   };
 };
 
-const createPixQrCode = async (dadosPagamento) => {
-  const amount = Number(dadosPagamento?.amount || dadosPagamento?.valor_centavos);
-  const expiresIn = dadosPagamento?.expiresIn
-    ? Number(dadosPagamento.expiresIn)
-    : undefined;
-
-  const descriptionBase =
-    dadosPagamento?.description || dadosPagamento?.descricao || dadosPagamento?.nome_produto;
-
-  const customerName = dadosPagamento?.name || dadosPagamento?.nome;
-  const customerCellphone = dadosPagamento?.cellphone || dadosPagamento?.celular;
-  const customerTaxId = dadosPagamento?.taxId || dadosPagamento?.cpf_cnpj;
-
-  const customer =
-    customerName || customerCellphone || dadosPagamento?.email || customerTaxId
-      ? {
-          name: customerName,
-          cellphone: customerCellphone,
-          email: dadosPagamento?.email,
-          taxId: customerTaxId,
-        }
-      : undefined;
-
-  const payload = onlyDefined({
-    amount,
-    expiresIn,
-    description: descriptionBase ? String(descriptionBase).slice(0, 37) : undefined,
-    customer,
-  });
-
-  const response = await axios.post(
-    `${ABACATEPAY_BASE_URL}/pixQrCode/create`,
-    payload,
-    {
-      timeout: 20000,
-      headers: getCommonHeaders(),
-    },
-  );
-
-  const data = response.data;
-  const pix = data?.data || data || {};
-
-  return {
-    status: true,
-    status_code: 201,
-    message: "QR Code PIX criado com sucesso",
-    pagamento: data,
-    pix: {
-      qr_code: pix?.qrCode || pix?.qr_code || pix?.qrCodeBase64 || null,
-      pix_copia_cola: pix?.brCode || pix?.pixCopyPaste || pix?.copyPaste || null,
-      expires_at: pix?.expiresAt || pix?.expires_at || null,
-    },
-  };
-};
-
-const handleProviderError = (error, endpointPath) => {
-  const message = extractErrorMessage(error);
-
-  return {
-    status: false,
-    status_code: error.response?.status || 500,
-    message,
-    erro: {
-      provider_status: error.response?.status || null,
-      provider_data: error.response?.data || null,
-      request_url: `${ABACATEPAY_BASE_URL}${endpointPath}`,
-    },
-  };
-};
-
-const criarPagamento = async function (dadosPagamento, contentType) {
-  const baseError = validateContentTypeAndApiKey(contentType);
-  if (baseError) return baseError;
-
-  const inputError = validateBillingInput(dadosPagamento);
-  if (inputError) return inputError;
-
-  const methods = parsePaymentMethods(dadosPagamento?.metodo_pagamento);
-
-  if (!methods) {
-    return {
-      status: false,
-      status_code: 400,
-      message: "metodo_pagamento inválido. Use: pix, cartao ou ambos.",
-    };
-  }
-
-  try {
-    return await createBilling(dadosPagamento, methods);
-  } catch (error) {
-    return handleProviderError(error, "/billing/create");
-  }
-};
-
-const criarPagamentoPix = async function (dadosPagamento, contentType) {
-  const baseError = validateContentTypeAndApiKey(contentType);
-  if (baseError) return baseError;
-
-  const inputError = validatePixInput(dadosPagamento);
-  if (inputError) return inputError;
-
-  try {
-    return await createPixQrCode(dadosPagamento);
-  } catch (error) {
-    return handleProviderError(error, "/pixQrCode/create");
-  }
-};
+const handleProviderError = (error) => ({
+  status: false,
+  status_code: error.response?.status || 500,
+  message: extractErrorMessage(error),
+  erro: {
+    provider_status: error.response?.status || null,
+    provider_data: error.response?.data || null,
+    request_url: `${ABACATEPAY_BASE_URL}/billing/create`,
+  },
+});
 
 const criarPagamentoCartao = async function (dadosPagamento, contentType) {
   const baseError = validateContentTypeAndApiKey(contentType);
   if (baseError) return baseError;
 
-  const inputError = validateBillingInput(dadosPagamento);
+  const inputError = validateCardInput(dadosPagamento);
   if (inputError) return inputError;
 
   try {
-    return await createBilling(dadosPagamento, PAYMENT_METHODS.cartao);
+    return await createCardBilling(dadosPagamento);
   } catch (error) {
-    return handleProviderError(error, "/billing/create");
+    return handleProviderError(error);
   }
 };
 
 module.exports = {
-  criarPagamento,
-  criarPagamentoPix,
+  criarPagamento: criarPagamentoCartao,
   criarPagamentoCartao,
 };

@@ -497,30 +497,6 @@ Deletar transação por código.
 
 > Rotas públicas (não exigem JWT).
 
-### POST `/api/pagamentos/pix`
-
-Cria um **QR Code PIX** usando `POST /v1/pixQrCode/create` da Abacate Pay.
-
-**Body (compatível com a documentação da Abacate Pay):**
-```json
-{
-  "amount": 2990,
-  "expiresIn": 1800,
-  "description": "Assinatura Premium",
-  "name": "João Silva",
-  "cellphone": "(11) 99999-9999",
-  "email": "joao@email.com",
-  "taxId": "123.456.789-01"
-}
-```
-
-**Observações importantes:**
-- `amount` é obrigatório e está em **centavos**.
-- `expiresIn` é opcional (segundos).
-- `description` é opcional e limitada a 37 caracteres.
-- `customer` é opcional, mas se qualquer campo de cliente for enviado, todos são obrigatórios (`name`, `cellphone`, `email`, `taxId`).
-- Também aceitamos aliases do seu sistema: `valor_centavos`, `descricao`, `nome_produto`, `nome`, `celular`, `cpf_cnpj`.
-
 ### POST `/api/pagamentos/cartao`
 
 Cria pagamento **somente cartão de crédito**.
@@ -542,12 +518,11 @@ Cria pagamento **somente cartão de crédito**.
 
 ### POST `/api/pagamentos`
 
-Cria pagamento com método flexível usando `metodo_pagamento` (`pix`, `cartao`, `ambos`).
+Cria pagamento com cartão de crédito (atalho equivalente a `/api/pagamentos/cartao`).
 
 **Body:**
 ```json
 {
-  "metodo_pagamento": "ambos",
   "nome_produto": "Assinatura Premium",
   "descricao": "Plano mensal",
   "quantidade": 1,
