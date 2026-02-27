@@ -17,6 +17,7 @@ const controllerUsuario = require("../controller/usuario/controllerUsuario.js");
 const controllerTransacao = require("../controller/transacao/controllerTransacao.js");
 const controllerAssinatura = require("../controller/assinatura/controllerAssinatura.js");
 const controllerIdentificador = require("../controller/indentificador/controllerIdentificador.js");
+const controllerPagamento = require("../controller/pagamento/controllerPagamento.js");
 
 // ==============================
 // ROTAS DE AUTENTICAÇÃO
@@ -307,6 +308,153 @@ router.get(
 
     let resultado =
       await controllerAssinatura.buscarAssinaturaPorUsuario(usuarioCodigo);
+
+    response.status(resultado.status_code || 200);
+    response.json(resultado);
+  },
+);
+
+// ==============================
+// ROTA DE PAGAMENTOS (SEM AUTENTICAÇÃO)
+// ==============================
+
+router.post("/pagamentos", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
+
+  let resultado = await controllerPagamento.criarPagamento(
+    dadosBody,
+    contentType,
+  );
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+
+router.post("/pagamentos/pix", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
+
+  let resultado = await controllerPagamento.criarPagamentoPix(
+    dadosBody,
+    contentType,
+  );
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+
+router.get("/pagamentos/pix/:pix_id/status", async (request, response) => {
+  let contentType = request.headers["content-type"] || "application/json";
+  let pixId = request.params.pix_id;
+
+  let resultado = await controllerPagamento.consultarPagamentoPix(
+    pixId,
+    contentType,
+  );
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+
+router.get(
+  "/pagamentos/cartao/:billing_id/status",
+  async (request, response) => {
+    let contentType = request.headers["content-type"] || "application/json";
+    let billingId = request.params.billing_id;
+
+    let resultado = await controllerPagamento.consultarPagamentoCartao(
+      billingId,
+      contentType,
+    );
+
+    response.status(resultado.status_code || 200);
+    response.json(resultado);
+  },
+);
+
+router.post("/pagamentos/cartao", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
+
+  let resultado = await controllerPagamento.criarPagamentoCartao(
+    dadosBody,
+    contentType,
+  );
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+
+router.post("/pagamentos/teste", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
+
+  let resultado = await controllerPagamento.criarPagamentoTeste(
+    dadosBody,
+    contentType,
+  );
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+router.post("/pagamentos/teste/pix", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
+
+  let resultado = await controllerPagamento.criarPagamentoPixTeste(
+    dadosBody,
+    contentType,
+  );
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+router.get(
+  "/pagamentos/teste/pix/:pix_id/status",
+  async (request, response) => {
+    let contentType = request.headers["content-type"] || "application/json";
+    let pixId = request.params.pix_id;
+
+    let resultado = await controllerPagamento.consultarPagamentoPixTeste(
+      pixId,
+      contentType,
+    );
+
+    response.status(resultado.status_code || 200);
+    response.json(resultado);
+  },
+);
+
+router.post("/pagamentos/teste/cartao", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
+
+  let resultado = await controllerPagamento.criarPagamentoCartaoTeste(
+    dadosBody,
+    contentType,
+  );
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+router.get(
+  "/pagamentos/teste/cartao/:billing_id/status",
+  async (request, response) => {
+    let contentType = request.headers["content-type"] || "application/json";
+    let billingId = request.params.billing_id;
+
+    let resultado = await controllerPagamento.consultarPagamentoCartaoTeste(
+      billingId,
+      contentType,
+    );
 
     response.status(resultado.status_code || 200);
     response.json(resultado);

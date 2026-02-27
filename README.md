@@ -292,3 +292,84 @@ As tabelas já estão criadas no Supabase conforme o schema fornecido:
 
 ISC
 "# BACK-MEUBOLSO" 
+
+## 💳 Pagamentos (Abacate Pay)
+
+### Variáveis de ambiente
+
+```env
+ABACATEPAY_API_KEY=sua_chave_producao
+ABACATEPAY_API_KEY_TEST=sua_chave_teste
+ABACATEPAY_BASE_URL=https://api.abacatepay.com/v1
+```
+
+### Endpoints públicos (produção)
+
+#### Gerar PIX (QR Code)
+```http
+POST /api/pagamentos/pix
+Content-Type: application/json
+
+{
+  "amount": 123,
+  "expiresIn": 123,
+  "description": "Pagamento",
+  "name": "Daniel Lima",
+  "cellphone": "(11) 4002-8922",
+  "email": "daniel_lima@abacatepay.com",
+  "taxId": "123.456.789-01"
+}
+```
+
+#### Consultar status do PIX
+```http
+GET /api/pagamentos/pix/:pix_id/status
+```
+Retornos úteis: `pix.status`, `pix.pago`, `controle_usuario`.
+
+#### Criar cobrança de cartão
+```http
+POST /api/pagamentos/cartao
+Content-Type: application/json
+
+{
+  "nome_produto": "Assinatura de Programa Fitness",
+  "descricao": "Acesso ao programa fitness premium por 1 mês.",
+  "quantidade": 2,
+  "valor_centavos": 2000,
+  "nome": "Daniel Lima",
+  "celular": "(11) 4002-8922",
+  "email": "daniel_lima@abacatepay.com",
+  "cpf_cnpj": "123.456.789-01",
+  "retorno_url": "https://example.com/billing",
+  "completion_url": "https://example.com/completion"
+}
+```
+Retorno útil: `checkout_url`.
+
+#### Consultar status do cartão
+```http
+GET /api/pagamentos/cartao/:billing_id/status
+```
+Retornos úteis: `cartao.status`, `cartao.pago`, `controle_usuario`.
+
+#### Atalho para cartão
+```http
+POST /api/pagamentos
+```
+
+### Endpoints de teste (chave dev)
+
+Usam `ABACATEPAY_API_KEY_TEST` com a mesma lógica dos endpoints de produção.
+
+```http
+POST /api/pagamentos/teste
+POST /api/pagamentos/teste/pix
+GET  /api/pagamentos/teste/pix/:pix_id/status
+POST /api/pagamentos/teste/cartao
+GET  /api/pagamentos/teste/cartao/:billing_id/status
+```
+
+### Persistência no banco
+
+Quando o status do pagamento vem como `PAID`, a API tenta vincular o pagamento ao usuário e registrar controle nas tabelas existentes do projeto (`usuarios` e `historico_assinaturas`).

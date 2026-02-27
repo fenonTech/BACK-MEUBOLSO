@@ -157,6 +157,26 @@ const selectByTelefoneUsuario = async function (telefone) {
   }
 };
 
+
+/**
+ * SELECIONAR USUÁRIO POR EMAIL
+ */
+const selectByEmailUsuario = async function (email) {
+  try {
+    const { data, error } = await supabase
+      .from("usuarios")
+      .select("*")
+      .eq("email", email)
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("Erro ao buscar usuário por email:", error);
+    return false;
+  }
+};
+
 /**
  * INCREMENTAR MENSAGENS DO USUÁRIO
  */
@@ -180,5 +200,6 @@ module.exports = {
   selectAllUsuarios,
   selectByIdUsuario,
   selectByTelefoneUsuario,
+  selectByEmailUsuario,
   incrementarMensagens,
 };

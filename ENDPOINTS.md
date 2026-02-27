@@ -490,3 +490,88 @@ Deletar transação por código.
 - acessoLiberado (Boolean)
 - created_at (Timestamp)
 - updated_at (Timestamp)
+
+---
+
+## 💳 Pagamentos (Abacate Pay)
+
+> Rotas públicas (não exigem JWT).
+
+### POST `/api/pagamentos/pix`
+
+Gera QR Code PIX usando `POST /v1/pixQrCode/create`.
+
+**Body:**
+```json
+{
+  "amount": 123,
+  "expiresIn": 123,
+  "description": "Pagamento",
+  "name": "Daniel Lima",
+  "cellphone": "(11) 4002-8922",
+  "email": "daniel_lima@abacatepay.com",
+  "taxId": "123.456.789-01"
+}
+```
+
+**Retorno útil:** `pix.pix_copia_cola`, `pix.qr_code_base64`, `pix.expires_at`.
+
+
+### GET `/api/pagamentos/pix/:pix_id/status`
+
+Consulta o status do QR Code PIX criado anteriormente.
+
+**Retorno útil:**
+- `pix.status` (ex.: `PENDING`, `PAID`)
+- `pix.pago` (`true` quando `status === "PAID"`)
+
+### GET `/api/pagamentos/cartao/:billing_id/status`
+
+Consulta o status do pagamento de cartão criado anteriormente.
+
+**Retorno útil:**
+- `cartao.status` (ex.: `PENDING`, `PAID`)
+- `cartao.pago` (`true` quando `status === "PAID"`)
+- `controle_usuario` (resultado da vinculação do pagamento com o usuário nas tabelas existentes)
+
+### POST `/api/pagamentos/cartao`
+
+Cria cobrança com cartão e retorna o link para checkout.
+
+**Body:**
+```json
+{
+  "nome_produto": "Assinatura de Programa Fitness",
+  "descricao": "Acesso ao programa fitness premium por 1 mês.",
+  "quantidade": 2,
+  "valor_centavos": 2000,
+  "nome": "Daniel Lima",
+  "celular": "(11) 4002-8922",
+  "email": "daniel_lima@abacatepay.com",
+  "cpf_cnpj": "123.456.789-01",
+  "retorno_url": "https://example.com/billing",
+  "completion_url": "https://example.com/completion"
+}
+```
+
+**Retorno útil:** `checkout_url` (link para o usuário clicar e pagar).
+
+### POST `/api/pagamentos`
+
+Atalho para o mesmo fluxo de cartão (`/api/pagamentos/cartao`).
+
+
+**Persistência nas tabelas já existentes**
+
+Quando o status vier `PAID`, a API tenta vincular o pagamento ao usuário e registrar nas tabelas já usadas pelo projeto (`usuarios` e `historico_assinaturas`).
+
+
+### Endpoints de teste (chave dev)
+
+Usam a variável `ABACATEPAY_API_KEY_TEST` e a mesma lógica de persistência em `usuarios` + `historico_assinaturas`.
+
+- `POST /api/pagamentos/teste`
+- `POST /api/pagamentos/teste/pix`
+- `GET /api/pagamentos/teste/pix/:pix_id/status`
+- `POST /api/pagamentos/teste/cartao`
+- `GET /api/pagamentos/teste/cartao/:billing_id/status`
