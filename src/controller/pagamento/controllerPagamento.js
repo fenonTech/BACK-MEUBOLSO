@@ -18,12 +18,15 @@ const onlyDefined = (obj) =>
     ),
   );
 
-const getCommonHeaders = () => ({
-  Authorization: `Bearer ${process.env.ABACATEPAY_API_KEY}`,
+const getApiKey = (isTeste = false) =>
+  isTeste ? process.env.ABACATEPAY_API_KEY_TEST : process.env.ABACATEPAY_API_KEY;
+
+const getCommonHeaders = (isTeste = false) => ({
+  Authorization: `Bearer ${getApiKey(isTeste)}`,
   "Content-Type": "application/json",
 });
 
-const validateBaseInput = (contentType) => {
+const validateBaseInput = (contentType, isTeste = false) => {
   if (!String(contentType || "").includes("application/json")) {
     return {
       status: false,
@@ -32,11 +35,13 @@ const validateBaseInput = (contentType) => {
     };
   }
 
-  if (!process.env.ABACATEPAY_API_KEY) {
+  if (!getApiKey(isTeste)) {
     return {
       status: false,
       status_code: 500,
-      message: "ABACATEPAY_API_KEY não configurada.",
+      message: isTeste
+        ? "ABACATEPAY_API_KEY_TEST não configurada."
+        : "ABACATEPAY_API_KEY não configurada.",
     };
   }
 
@@ -215,8 +220,8 @@ const createPixPayload = (dadosPagamento) => {
   });
 };
 
-const criarPagamentoPix = async function (dadosPagamento, contentType) {
-  const baseError = validateBaseInput(contentType);
+const criarPagamentoPix = async function (dadosPagamento, contentType, isTeste = false) {
+  const baseError = validateBaseInput(contentType, isTeste);
   if (baseError) return baseError;
 
   const inputError = validatePixInput(dadosPagamento);
@@ -228,7 +233,7 @@ const criarPagamentoPix = async function (dadosPagamento, contentType) {
       createPixPayload(dadosPagamento),
       {
         timeout: 20000,
-        headers: getCommonHeaders(),
+        headers: getCommonHeaders(isTeste),
       },
     );
 
@@ -335,8 +340,8 @@ const createCardPayload = (dadosPagamento) => {
   });
 };
 
-const criarPagamentoCartao = async function (dadosPagamento, contentType) {
-  const baseError = validateBaseInput(contentType);
+const criarPagamentoCartao = async function (dadosPagamento, contentType, isTeste = false) {
+  const baseError = validateBaseInput(contentType, isTeste);
   if (baseError) return baseError;
 
   const inputError = validateCardInput(dadosPagamento);
@@ -348,7 +353,7 @@ const criarPagamentoCartao = async function (dadosPagamento, contentType) {
       createCardPayload(dadosPagamento),
       {
         timeout: 20000,
-        headers: getCommonHeaders(),
+        headers: getCommonHeaders(isTeste),
       },
     );
 
@@ -378,8 +383,8 @@ const criarPagamentoCartao = async function (dadosPagamento, contentType) {
   }
 };
 
-const consultarPagamentoPix = async function (pixId, contentType) {
-  const baseError = validateBaseInput(contentType || "application/json");
+const consultarPagamentoPix = async function (pixId, contentType, isTeste = false) {
+  const baseError = validateBaseInput(contentType || "application/json", isTeste);
   if (baseError) return baseError;
 
   if (!pixId) {
@@ -396,7 +401,7 @@ const consultarPagamentoPix = async function (pixId, contentType) {
     try {
       response = await axios.get(`${ABACATEPAY_BASE_URL}/pixQrCode/check`, {
         timeout: 20000,
-        headers: getCommonHeaders(),
+        headers: getCommonHeaders(isTeste),
         params: { id: pixId },
       });
     } catch (getError) {
@@ -405,7 +410,7 @@ const consultarPagamentoPix = async function (pixId, contentType) {
         { id: pixId },
         {
           timeout: 20000,
-          headers: getCommonHeaders(),
+          headers: getCommonHeaders(isTeste),
         },
       );
     }
@@ -443,8 +448,8 @@ const consultarPagamentoPix = async function (pixId, contentType) {
   }
 };
 
-const consultarPagamentoCartao = async function (billingId, contentType) {
-  const baseError = validateBaseInput(contentType || "application/json");
+const consultarPagamentoCartao = async function (billingId, contentType, isTeste = false) {
+  const baseError = validateBaseInput(contentType || "application/json", isTeste);
   if (baseError) return baseError;
 
   if (!billingId) {
@@ -461,7 +466,7 @@ const consultarPagamentoCartao = async function (billingId, contentType) {
     try {
       response = await axios.get(`${ABACATEPAY_BASE_URL}/billing/check`, {
         timeout: 20000,
-        headers: getCommonHeaders(),
+        headers: getCommonHeaders(isTeste),
         params: { id: billingId },
       });
     } catch (getError) {
@@ -470,7 +475,7 @@ const consultarPagamentoCartao = async function (billingId, contentType) {
         { id: billingId },
         {
           timeout: 20000,
-          headers: getCommonHeaders(),
+          headers: getCommonHeaders(isTeste),
         },
       );
     }
@@ -506,10 +511,37 @@ const consultarPagamentoCartao = async function (billingId, contentType) {
   }
 };
 
+
+const criarPagamentoPixTeste = async function (dadosPagamento, contentType) {
+  return criarPagamentoPix(dadosPagamento, contentType, true);
+};
+
+const criarPagamentoCartaoTeste = async function (dadosPagamento, contentType) {
+  return criarPagamentoCartao(dadosPagamento, contentType, true);
+};
+
+const consultarPagamentoPixTeste = async function (pixId, contentType) {
+  return consultarPagamentoPix(pixId, contentType, true);
+};
+
+const consultarPagamentoCartaoTeste = async function (billingId, contentType) {
+  return consultarPagamentoCartao(billingId, contentType, true);
+};
+
+const criarPagamentoTeste = async function (dadosPagamento, contentType) {
+  return criarPagamentoCartao(dadosPagamento, contentType, true);
+};
+
+
 module.exports = {
   criarPagamento: criarPagamentoCartao,
   criarPagamentoPix,
   criarPagamentoCartao,
   consultarPagamentoPix,
   consultarPagamentoCartao,
+  criarPagamentoTeste,
+  criarPagamentoPixTeste,
+  criarPagamentoCartaoTeste,
+  consultarPagamentoPixTeste,
+  consultarPagamentoCartaoTeste,
 };

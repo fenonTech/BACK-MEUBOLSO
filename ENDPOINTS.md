@@ -564,3 +564,14 @@ Atalho para o mesmo fluxo de cartão (`/api/pagamentos/cartao`).
 **Persistência nas tabelas já existentes**
 
 Quando o status vier `PAID`, a API tenta vincular o pagamento ao usuário e registrar nas tabelas já usadas pelo projeto (`usuarios` e `historico_assinaturas`).
+
+
+### Endpoints de teste (chave dev)
+
+Usam a variável `ABACATEPAY_API_KEY_TEST` e a mesma lógica de persistência em `usuarios` + `historico_assinaturas`.
+
+- `POST /api/pagamentos/teste`
+- `POST /api/pagamentos/teste/pix`
+- `GET /api/pagamentos/teste/pix/:pix_id/status`
+- `POST /api/pagamentos/teste/cartao`
+- `GET /api/pagamentos/teste/cartao/:billing_id/status`
