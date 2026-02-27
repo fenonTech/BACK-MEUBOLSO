@@ -5,6 +5,7 @@
  **************************************************************************/
 
 const axios = require("axios");
+const pagamentoDAO = require("../../model/DAO/pagamento.js");
 
 const ABACATEPAY_BASE_URL =
   process.env.ABACATEPAY_BASE_URL || "https://api.abacatepay.com/v1";
@@ -56,6 +57,26 @@ const extractErrorMessage = (error) => {
     error?.message ||
     "Erro ao criar pagamento na Abacate Pay"
   );
+};
+
+
+const persistirPagamento = async (dadosPersistencia) => {
+  const resultadoPersistencia =
+    await pagamentoDAO.salvarOuAtualizarPagamento(dadosPersistencia);
+
+  if (!resultadoPersistencia.status) {
+    return {
+      status: false,
+      message: "Falha ao persistir pagamento no banco de dados.",
+      detalhe: resultadoPersistencia.message,
+    };
+  }
+
+  return {
+    status: true,
+    action: resultadoPersistencia.action,
+    pagamento_id_interno: resultadoPersistencia.data?.id || null,
+  };
 };
 
 const handleProviderError = (error, endpointPath) => ({
@@ -144,6 +165,19 @@ const criarPagamentoPix = async function (dadosPagamento, contentType) {
 
     const data = response.data?.data || {};
 
+    const persistencia = await persistirPagamento({
+      provider: "ABACATEPAY",
+      tipo: "PIX",
+      provider_payment_id: data.id || null,
+      status: data.status || null,
+      valor_centavos: data.amount || Number(dadosPagamento?.amount || dadosPagamento?.valor_centavos),
+      pix_copia_cola: data.brCode || null,
+      qr_code_base64: data.brCodeBase64 || null,
+      expires_at: data.expiresAt || null,
+      checkout_url: null,
+      raw_payload: response.data,
+    });
+
     return {
       status: true,
       status_code: 201,
@@ -156,6 +190,7 @@ const criarPagamentoPix = async function (dadosPagamento, contentType) {
         qr_code_base64: data.brCodeBase64 || null,
         expires_at: data.expiresAt || null,
       },
+      persistencia,
     };
   } catch (error) {
     return handleProviderError(error, "/pixQrCode/create");
@@ -252,12 +287,26 @@ const criarPagamentoCartao = async function (dadosPagamento, contentType) {
 
     const data = response.data?.data || {};
 
+    const persistencia = await persistirPagamento({
+      provider: "ABACATEPAY",
+      tipo: "CARD",
+      provider_payment_id: data.id || null,
+      status: data.status || null,
+      valor_centavos: data.amount || Number(dadosPagamento?.valor_centavos),
+      pix_copia_cola: null,
+      qr_code_base64: null,
+      expires_at: null,
+      checkout_url: data.url || null,
+      raw_payload: response.data,
+    });
+
     return {
       status: true,
       status_code: 201,
       message: "Pagamento com cartão criado com sucesso",
       pagamento: response.data,
       checkout_url: data.url || null,
+      persistencia,
     };
   } catch (error) {
     return handleProviderError(error, "/billing/create");
@@ -302,6 +351,19 @@ const consultarPagamentoPix = async function (pixId, contentType) {
 
     const data = response.data?.data || {};
 
+    const persistencia = await persistirPagamento({
+      provider: "ABACATEPAY",
+      tipo: "PIX",
+      provider_payment_id: data.id || pixId,
+      status: data.status || null,
+      valor_centavos: data.amount || null,
+      pix_copia_cola: data.brCode || null,
+      qr_code_base64: data.brCodeBase64 || null,
+      expires_at: data.expiresAt || null,
+      checkout_url: null,
+      raw_payload: response.data,
+    });
+
     return {
       status: true,
       status_code: 200,
@@ -315,15 +377,87 @@ const consultarPagamentoPix = async function (pixId, contentType) {
         qr_code_base64: data.brCodeBase64 || null,
         expires_at: data.expiresAt || null,
       },
+      persistencia,
     };
   } catch (error) {
     return handleProviderError(error, "/pixQrCode/check");
   }
 };
 
+
+const consultarPagamentoCartao = async function (billingId, contentType) {
+  const baseError = validateBaseInput(contentType || "application/json");
+  if (baseError) return baseError;
+
+  if (!billingId) {
+    return {
+      status: false,
+      status_code: 400,
+      message: "billing_id é obrigatório.",
+    };
+  }
+
+  try {
+    let response;
+
+    try {
+      response = await axios.get(
+        `${ABACATEPAY_BASE_URL}/billing/check`,
+        {
+          timeout: 20000,
+          headers: getCommonHeaders(),
+          params: { id: billingId },
+        },
+      );
+    } catch (getError) {
+      response = await axios.post(
+        `${ABACATEPAY_BASE_URL}/billing/check`,
+        { id: billingId },
+        {
+          timeout: 20000,
+          headers: getCommonHeaders(),
+        },
+      );
+    }
+
+    const data = response.data?.data || {};
+
+    const persistencia = await persistirPagamento({
+      provider: "ABACATEPAY",
+      tipo: "CARD",
+      provider_payment_id: data.id || billingId,
+      status: data.status || null,
+      valor_centavos: data.amount || null,
+      pix_copia_cola: null,
+      qr_code_base64: null,
+      expires_at: null,
+      checkout_url: data.url || null,
+      raw_payload: response.data,
+    });
+
+    return {
+      status: true,
+      status_code: 200,
+      message: "Status do pagamento com cartão consultado com sucesso",
+      pagamento: response.data,
+      checkout_url: data.url || null,
+      cartao: {
+        id: data.id || billingId,
+        status: data.status || null,
+        pago: data.status === "PAID",
+      },
+      persistencia,
+    };
+  } catch (error) {
+    return handleProviderError(error, "/billing/check");
+  }
+};
+
+
 module.exports = {
   criarPagamento: criarPagamentoCartao,
   criarPagamentoPix,
   criarPagamentoCartao,
   consultarPagamentoPix,
+  consultarPagamentoCartao,
 };
