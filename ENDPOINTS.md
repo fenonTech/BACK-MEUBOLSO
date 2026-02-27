@@ -532,7 +532,7 @@ Consulta o status do pagamento de cartão criado anteriormente.
 **Retorno útil:**
 - `cartao.status` (ex.: `PENDING`, `PAID`)
 - `cartao.pago` (`true` quando `status === "PAID"`)
-- `persistencia` (resultado da atualização no banco)
+- `controle_usuario` (resultado da vinculação do pagamento com o usuário nas tabelas existentes)
 
 ### POST `/api/pagamentos/cartao`
 
@@ -561,6 +561,6 @@ Cria cobrança com cartão e retorna o link para checkout.
 Atalho para o mesmo fluxo de cartão (`/api/pagamentos/cartao`).
 
 
-**Tabela esperada no banco (`pagamentos`)**
+**Persistência nas tabelas já existentes**
 
-Campos usados pela API para controle: `provider_payment_id`, `provider`, `tipo`, `status`, `valor_centavos`, `pix_copia_cola`, `qr_code_base64`, `expires_at`, `checkout_url`, `raw_payload`, `created_at`, `updated_at`.
+Quando o status vier `PAID`, a API tenta vincular o pagamento ao usuário e registrar nas tabelas já usadas pelo projeto (`usuarios` e `historico_assinaturas`).

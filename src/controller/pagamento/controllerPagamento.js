@@ -5,7 +5,8 @@
  **************************************************************************/
 
 const axios = require("axios");
-const pagamentoDAO = require("../../model/DAO/pagamento.js");
+const usuarioDAO = require("../../model/DAO/usuario.js");
+const historicoAssinaturaDAO = require("../../model/DAO/historicoAssinatura.js");
 
 const ABACATEPAY_BASE_URL =
   process.env.ABACATEPAY_BASE_URL || "https://api.abacatepay.com/v1";
@@ -59,26 +60,6 @@ const extractErrorMessage = (error) => {
   );
 };
 
-
-const persistirPagamento = async (dadosPersistencia) => {
-  const resultadoPersistencia =
-    await pagamentoDAO.salvarOuAtualizarPagamento(dadosPersistencia);
-
-  if (!resultadoPersistencia.status) {
-    return {
-      status: false,
-      message: "Falha ao persistir pagamento no banco de dados.",
-      detalhe: resultadoPersistencia.message,
-    };
-  }
-
-  return {
-    status: true,
-    action: resultadoPersistencia.action,
-    pagamento_id_interno: resultadoPersistencia.data?.id || null,
-  };
-};
-
 const handleProviderError = (error, endpointPath) => ({
   status: false,
   status_code: error.response?.status || 500,
@@ -89,6 +70,94 @@ const handleProviderError = (error, endpointPath) => ({
     request_url: `${ABACATEPAY_BASE_URL}${endpointPath}`,
   },
 });
+
+const mapearPlanoId = (nomeProduto = "") => {
+  const nome = String(nomeProduto).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  if (nome.includes("essencial")) return { plano_id: 2, status_plano: "Plano Essencial" };
+  if (nome.includes("inteligente")) return { plano_id: 3, status_plano: "Plano Inteligente" };
+  if (nome.includes("visionario") || nome.includes("visionário"))
+    return { plano_id: 4, status_plano: "Plano Visionário" };
+
+  return null;
+};
+
+const registrarPagamentoAprovado = async ({
+  tipo,
+  providerId,
+  status,
+  amount,
+  nomeProduto,
+  email,
+  telefone,
+  prazo,
+}) => {
+  if (status !== "PAID") {
+    return {
+      status: false,
+      message: "Pagamento ainda não está aprovado (status diferente de PAID).",
+    };
+  }
+
+  let usuario = null;
+
+  if (email) {
+    usuario = await usuarioDAO.selectByEmailUsuario(email);
+  }
+
+  if (!usuario && telefone) {
+    usuario = await usuarioDAO.selectByTelefoneUsuario(telefone);
+  }
+
+  if (!usuario?.id) {
+    return {
+      status: false,
+      message: "Pagamento aprovado, mas usuário não encontrado para vinculação.",
+    };
+  }
+
+  const checkoutId = providerId;
+  const historicoExistente = await historicoAssinaturaDAO.selectHistoricoByCheckoutId(
+    checkoutId,
+  );
+
+  let historico = historicoExistente;
+
+  if (!historicoExistente) {
+    historico = await historicoAssinaturaDAO.insertHistoricoAssinatura({
+      usuarioCodigo: usuario.id,
+      checkout_id: checkoutId,
+      nome_assinatura: nomeProduto || `Pagamento ${tipo}`,
+      dataAssinatura: new Date().toISOString(),
+      prazo: prazo || new Date().toISOString(),
+      plano_id_cakto: `abacatepay_${tipo.toLowerCase()}`,
+      plano_id: usuario.plano_id || 1,
+      is_cancelado: false,
+    });
+  }
+
+  const plano = mapearPlanoId(nomeProduto);
+  let usuarioAtualizado = null;
+
+  if (plano) {
+    usuarioAtualizado = await usuarioDAO.updateUsuario(usuario.id, {
+      plano_id: plano.plano_id,
+      status_plano: plano.status_plano,
+    });
+  } else {
+    usuarioAtualizado = await usuarioDAO.updateUsuario(usuario.id, {
+      status_plano: `Pagamento ${tipo} aprovado (${amount || 0} centavos)`,
+    });
+  }
+
+  return {
+    status: true,
+    message: "Pagamento aprovado e vinculado ao usuário com sucesso.",
+    usuario_id: usuario.id,
+    historico_id: historico?.id || null,
+    usuario_atualizado: Boolean(usuarioAtualizado),
+  };
+};
 
 const validatePixInput = (dadosPagamento) => {
   const amount = Number(dadosPagamento?.amount || dadosPagamento?.valor_centavos);
@@ -165,17 +234,15 @@ const criarPagamentoPix = async function (dadosPagamento, contentType) {
 
     const data = response.data?.data || {};
 
-    const persistencia = await persistirPagamento({
-      provider: "ABACATEPAY",
+    const controleUsuario = await registrarPagamentoAprovado({
       tipo: "PIX",
-      provider_payment_id: data.id || null,
+      providerId: data.id || null,
       status: data.status || null,
-      valor_centavos: data.amount || Number(dadosPagamento?.amount || dadosPagamento?.valor_centavos),
-      pix_copia_cola: data.brCode || null,
-      qr_code_base64: data.brCodeBase64 || null,
-      expires_at: data.expiresAt || null,
-      checkout_url: null,
-      raw_payload: response.data,
+      amount: data.amount || Number(dadosPagamento?.amount || dadosPagamento?.valor_centavos),
+      nomeProduto: dadosPagamento?.nome_produto || dadosPagamento?.description,
+      email: data?.customer?.metadata?.email || dadosPagamento?.email,
+      telefone: data?.customer?.metadata?.cellphone || dadosPagamento?.celular,
+      prazo: data.expiresAt || null,
     });
 
     return {
@@ -190,7 +257,7 @@ const criarPagamentoPix = async function (dadosPagamento, contentType) {
         qr_code_base64: data.brCodeBase64 || null,
         expires_at: data.expiresAt || null,
       },
-      persistencia,
+      controle_usuario: controleUsuario,
     };
   } catch (error) {
     return handleProviderError(error, "/pixQrCode/create");
@@ -287,17 +354,15 @@ const criarPagamentoCartao = async function (dadosPagamento, contentType) {
 
     const data = response.data?.data || {};
 
-    const persistencia = await persistirPagamento({
-      provider: "ABACATEPAY",
+    const controleUsuario = await registrarPagamentoAprovado({
       tipo: "CARD",
-      provider_payment_id: data.id || null,
+      providerId: data.id || null,
       status: data.status || null,
-      valor_centavos: data.amount || Number(dadosPagamento?.valor_centavos),
-      pix_copia_cola: null,
-      qr_code_base64: null,
-      expires_at: null,
-      checkout_url: data.url || null,
-      raw_payload: response.data,
+      amount: data.amount || Number(dadosPagamento?.valor_centavos),
+      nomeProduto: dadosPagamento?.nome_produto,
+      email: data?.customer?.metadata?.email || dadosPagamento?.email,
+      telefone: data?.customer?.metadata?.cellphone || dadosPagamento?.celular,
+      prazo: null,
     });
 
     return {
@@ -306,13 +371,12 @@ const criarPagamentoCartao = async function (dadosPagamento, contentType) {
       message: "Pagamento com cartão criado com sucesso",
       pagamento: response.data,
       checkout_url: data.url || null,
-      persistencia,
+      controle_usuario: controleUsuario,
     };
   } catch (error) {
     return handleProviderError(error, "/billing/create");
   }
 };
-
 
 const consultarPagamentoPix = async function (pixId, contentType) {
   const baseError = validateBaseInput(contentType || "application/json");
@@ -330,14 +394,11 @@ const consultarPagamentoPix = async function (pixId, contentType) {
     let response;
 
     try {
-      response = await axios.get(
-        `${ABACATEPAY_BASE_URL}/pixQrCode/check`,
-        {
-          timeout: 20000,
-          headers: getCommonHeaders(),
-          params: { id: pixId },
-        },
-      );
+      response = await axios.get(`${ABACATEPAY_BASE_URL}/pixQrCode/check`, {
+        timeout: 20000,
+        headers: getCommonHeaders(),
+        params: { id: pixId },
+      });
     } catch (getError) {
       response = await axios.post(
         `${ABACATEPAY_BASE_URL}/pixQrCode/check`,
@@ -351,17 +412,15 @@ const consultarPagamentoPix = async function (pixId, contentType) {
 
     const data = response.data?.data || {};
 
-    const persistencia = await persistirPagamento({
-      provider: "ABACATEPAY",
+    const controleUsuario = await registrarPagamentoAprovado({
       tipo: "PIX",
-      provider_payment_id: data.id || pixId,
+      providerId: data.id || pixId,
       status: data.status || null,
-      valor_centavos: data.amount || null,
-      pix_copia_cola: data.brCode || null,
-      qr_code_base64: data.brCodeBase64 || null,
-      expires_at: data.expiresAt || null,
-      checkout_url: null,
-      raw_payload: response.data,
+      amount: data.amount || null,
+      nomeProduto: data?.description || "Pagamento PIX",
+      email: data?.customer?.metadata?.email || null,
+      telefone: data?.customer?.metadata?.cellphone || null,
+      prazo: data.expiresAt || null,
     });
 
     return {
@@ -377,13 +436,12 @@ const consultarPagamentoPix = async function (pixId, contentType) {
         qr_code_base64: data.brCodeBase64 || null,
         expires_at: data.expiresAt || null,
       },
-      persistencia,
+      controle_usuario: controleUsuario,
     };
   } catch (error) {
     return handleProviderError(error, "/pixQrCode/check");
   }
 };
-
 
 const consultarPagamentoCartao = async function (billingId, contentType) {
   const baseError = validateBaseInput(contentType || "application/json");
@@ -401,14 +459,11 @@ const consultarPagamentoCartao = async function (billingId, contentType) {
     let response;
 
     try {
-      response = await axios.get(
-        `${ABACATEPAY_BASE_URL}/billing/check`,
-        {
-          timeout: 20000,
-          headers: getCommonHeaders(),
-          params: { id: billingId },
-        },
-      );
+      response = await axios.get(`${ABACATEPAY_BASE_URL}/billing/check`, {
+        timeout: 20000,
+        headers: getCommonHeaders(),
+        params: { id: billingId },
+      });
     } catch (getError) {
       response = await axios.post(
         `${ABACATEPAY_BASE_URL}/billing/check`,
@@ -422,17 +477,15 @@ const consultarPagamentoCartao = async function (billingId, contentType) {
 
     const data = response.data?.data || {};
 
-    const persistencia = await persistirPagamento({
-      provider: "ABACATEPAY",
+    const controleUsuario = await registrarPagamentoAprovado({
       tipo: "CARD",
-      provider_payment_id: data.id || billingId,
+      providerId: data.id || billingId,
       status: data.status || null,
-      valor_centavos: data.amount || null,
-      pix_copia_cola: null,
-      qr_code_base64: null,
-      expires_at: null,
-      checkout_url: data.url || null,
-      raw_payload: response.data,
+      amount: data.amount || null,
+      nomeProduto: data?.products?.[0]?.name || "Pagamento Cartão",
+      email: data?.customer?.metadata?.email || null,
+      telefone: data?.customer?.metadata?.cellphone || null,
+      prazo: null,
     });
 
     return {
@@ -446,13 +499,12 @@ const consultarPagamentoCartao = async function (billingId, contentType) {
         status: data.status || null,
         pago: data.status === "PAID",
       },
-      persistencia,
+      controle_usuario: controleUsuario,
     };
   } catch (error) {
     return handleProviderError(error, "/billing/check");
   }
 };
-
 
 module.exports = {
   criarPagamento: criarPagamentoCartao,
