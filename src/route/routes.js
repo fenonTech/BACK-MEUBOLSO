@@ -331,18 +331,6 @@ router.post("/pagamentos", async (request, response) => {
   response.json(resultado);
 });
 
-router.post("/pagamentos/pix", async (request, response) => {
-  let contentType = request.headers["content-type"];
-  let dadosBody = request.body;
-
-  let resultado = await controllerPagamento.criarPagamentoPix(
-    dadosBody,
-    contentType,
-  );
-
-  response.status(resultado.status_code || 200);
-  response.json(resultado);
-});
 
 router.post("/pagamentos/cartao", async (request, response) => {
   let contentType = request.headers["content-type"];
