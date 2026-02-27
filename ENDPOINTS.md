@@ -499,26 +499,27 @@ Deletar transação por código.
 
 ### POST `/api/pagamentos/pix`
 
-Cria pagamento **somente PIX** e retorna dados para `qr_code` e `pix_copia_cola`.
+Cria um **QR Code PIX** usando `POST /v1/pixQrCode/create` da Abacate Pay.
 
-
-**Observação de erro:**
-Se houver falha na integração, a API retorna detalhes em `erro.provider_data` e `erro.provider_status` para facilitar diagnóstico com a Abacate Pay.
-
-**Body:**
+**Body (compatível com a documentação da Abacate Pay):**
 ```json
 {
-  "nome_produto": "Assinatura Premium",
-  "descricao": "Plano mensal",
-  "quantidade": 1,
-  "valor_centavos": 2990,
-  "nome": "João Silva",
+  "amount": 2990,
+  "expiresIn": 1800,
+  "description": "Assinatura Premium",
+  "name": "João Silva",
+  "cellphone": "(11) 99999-9999",
   "email": "joao@email.com",
-  "celular": "+5511999999999",
-  "cpf_cnpj": "12345678909",
-  "retorno_url": "https://seusite.com/obrigado"
+  "taxId": "123.456.789-01"
 }
 ```
+
+**Observações importantes:**
+- `amount` é obrigatório e está em **centavos**.
+- `expiresIn` é opcional (segundos).
+- `description` é opcional e limitada a 37 caracteres.
+- `customer` é opcional, mas se qualquer campo de cliente for enviado, todos são obrigatórios (`name`, `cellphone`, `email`, `taxId`).
+- Também aceitamos aliases do seu sistema: `valor_centavos`, `descricao`, `nome_produto`, `nome`, `celular`, `cpf_cnpj`.
 
 ### POST `/api/pagamentos/cartao`
 
