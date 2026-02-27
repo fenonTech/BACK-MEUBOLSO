@@ -490,3 +490,71 @@ Deletar transação por código.
 - acessoLiberado (Boolean)
 - created_at (Timestamp)
 - updated_at (Timestamp)
+
+---
+
+## 💳 Pagamentos (Abacate Pay)
+
+> Rotas públicas (não exigem JWT).
+
+### POST `/api/pagamentos/pix`
+
+Cria pagamento **somente PIX** e retorna dados para `qr_code` e `pix_copia_cola`.
+
+
+**Observação de erro:**
+Se houver falha na integração, a API retorna detalhes em `erro.provider_data` e `erro.provider_status` para facilitar diagnóstico com a Abacate Pay.
+
+**Body:**
+```json
+{
+  "nome_produto": "Assinatura Premium",
+  "descricao": "Plano mensal",
+  "quantidade": 1,
+  "valor_centavos": 2990,
+  "nome": "João Silva",
+  "email": "joao@email.com",
+  "celular": "+5511999999999",
+  "cpf_cnpj": "12345678909",
+  "retorno_url": "https://seusite.com/obrigado"
+}
+```
+
+### POST `/api/pagamentos/cartao`
+
+Cria pagamento **somente cartão de crédito**.
+
+**Body:**
+```json
+{
+  "nome_produto": "Assinatura Premium",
+  "descricao": "Plano mensal",
+  "quantidade": 1,
+  "valor_centavos": 2990,
+  "nome": "João Silva",
+  "email": "joao@email.com",
+  "celular": "+5511999999999",
+  "cpf_cnpj": "12345678909",
+  "retorno_url": "https://seusite.com/obrigado"
+}
+```
+
+### POST `/api/pagamentos`
+
+Cria pagamento com método flexível usando `metodo_pagamento` (`pix`, `cartao`, `ambos`).
+
+**Body:**
+```json
+{
+  "metodo_pagamento": "ambos",
+  "nome_produto": "Assinatura Premium",
+  "descricao": "Plano mensal",
+  "quantidade": 1,
+  "valor_centavos": 2990,
+  "nome": "João Silva",
+  "email": "joao@email.com",
+  "celular": "+5511999999999",
+  "cpf_cnpj": "12345678909",
+  "retorno_url": "https://seusite.com/obrigado"
+}
+```
