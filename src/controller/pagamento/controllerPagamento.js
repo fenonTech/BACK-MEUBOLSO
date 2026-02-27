@@ -5,8 +5,7 @@
  **************************************************************************/
 
 const axios = require("axios");
-const usuarioDAO = require("../../model/DAO/usuario.js");
-const historicoAssinaturaDAO = require("../../model/DAO/historicoAssinatura.js");
+const controllerAssinatura = require("../assinatura/controllerAssinatura.js");
 
 const ABACATEPAY_BASE_URL =
   process.env.ABACATEPAY_BASE_URL || "https://api.abacatepay.com/v1";
@@ -76,93 +75,18 @@ const handleProviderError = (error, endpointPath) => ({
   },
 });
 
-const mapearPlanoId = (nomeProduto = "") => {
-  const nome = String(nomeProduto).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-  if (nome.includes("essencial")) return { plano_id: 2, status_plano: "Plano Essencial" };
-  if (nome.includes("inteligente")) return { plano_id: 3, status_plano: "Plano Inteligente" };
-  if (nome.includes("visionario") || nome.includes("visionário"))
-    return { plano_id: 4, status_plano: "Plano Visionário" };
-
-  return null;
-};
-
-const registrarPagamentoAprovado = async ({
-  tipo,
-  providerId,
-  status,
-  amount,
-  nomeProduto,
-  email,
-  telefone,
-  prazo,
-}) => {
-  if (status !== "PAID") {
-    return {
-      status: false,
-      message: "Pagamento ainda não está aprovado (status diferente de PAID).",
-    };
-  }
-
-  let usuario = null;
-
-  if (email) {
-    usuario = await usuarioDAO.selectByEmailUsuario(email);
-  }
-
-  if (!usuario && telefone) {
-    usuario = await usuarioDAO.selectByTelefoneUsuario(telefone);
-  }
-
-  if (!usuario?.id) {
-    return {
-      status: false,
-      message: "Pagamento aprovado, mas usuário não encontrado para vinculação.",
-    };
-  }
-
-  const checkoutId = providerId;
-  const historicoExistente = await historicoAssinaturaDAO.selectHistoricoByCheckoutId(
-    checkoutId,
-  );
-
-  let historico = historicoExistente;
-
-  if (!historicoExistente) {
-    historico = await historicoAssinaturaDAO.insertHistoricoAssinatura({
-      usuarioCodigo: usuario.id,
-      checkout_id: checkoutId,
-      nome_assinatura: nomeProduto || `Pagamento ${tipo}`,
-      dataAssinatura: new Date().toISOString(),
-      prazo: prazo || new Date().toISOString(),
-      plano_id_cakto: `abacatepay_${tipo.toLowerCase()}`,
-      plano_id: usuario.plano_id || 1,
-      is_cancelado: false,
-    });
-  }
-
-  const plano = mapearPlanoId(nomeProduto);
-  let usuarioAtualizado = null;
-
-  if (plano) {
-    usuarioAtualizado = await usuarioDAO.updateUsuario(usuario.id, {
-      plano_id: plano.plano_id,
-      status_plano: plano.status_plano,
-    });
-  } else {
-    usuarioAtualizado = await usuarioDAO.updateUsuario(usuario.id, {
-      status_plano: `Pagamento ${tipo} aprovado (${amount || 0} centavos)`,
-    });
-  }
-
-  return {
-    status: true,
-    message: "Pagamento aprovado e vinculado ao usuário com sucesso.",
-    usuario_id: usuario.id,
-    historico_id: historico?.id || null,
-    usuario_atualizado: Boolean(usuarioAtualizado),
-  };
-};
+// Delega toda a lógica de ativação ao controllerAssinatura
+const registrarPagamentoAprovado = ({ tipo, providerId, status, amount, nomeProduto, email, telefone, prazo }) =>
+  controllerAssinatura.ativarAssinaturaAbacatePay({
+    tipo,
+    checkoutId: providerId,
+    status,
+    amount,
+    nomeProduto,
+    email,
+    telefone,
+    prazo,
+  });
 
 const validatePixInput = (dadosPagamento) => {
   const amount = Number(dadosPagamento?.amount || dadosPagamento?.valor_centavos);
@@ -245,8 +169,8 @@ const criarPagamentoPix = async function (dadosPagamento, contentType, isTeste =
       status: data.status || null,
       amount: data.amount || Number(dadosPagamento?.amount || dadosPagamento?.valor_centavos),
       nomeProduto: dadosPagamento?.nome_produto || dadosPagamento?.description,
-      email: data?.customer?.metadata?.email || dadosPagamento?.email,
-      telefone: data?.customer?.metadata?.cellphone || dadosPagamento?.celular,
+      email: data?.customer?.email || dadosPagamento?.email,
+      telefone: data?.customer?.cellphone || dadosPagamento?.celular,
       prazo: data.expiresAt || null,
     });
 
@@ -365,8 +289,8 @@ const criarPagamentoCartao = async function (dadosPagamento, contentType, isTest
       status: data.status || null,
       amount: data.amount || Number(dadosPagamento?.valor_centavos),
       nomeProduto: dadosPagamento?.nome_produto,
-      email: data?.customer?.metadata?.email || dadosPagamento?.email,
-      telefone: data?.customer?.metadata?.cellphone || dadosPagamento?.celular,
+      email: data?.customer?.email || dadosPagamento?.email,
+      telefone: data?.customer?.cellphone || dadosPagamento?.celular,
       prazo: null,
     });
 
@@ -423,8 +347,8 @@ const consultarPagamentoPix = async function (pixId, contentType, isTeste = fals
       status: data.status || null,
       amount: data.amount || null,
       nomeProduto: data?.description || "Pagamento PIX",
-      email: data?.customer?.metadata?.email || null,
-      telefone: data?.customer?.metadata?.cellphone || null,
+      email: data?.customer?.email || null,
+      telefone: data?.customer?.cellphone || null,
       prazo: data.expiresAt || null,
     });
 
@@ -488,8 +412,8 @@ const consultarPagamentoCartao = async function (billingId, contentType, isTeste
       status: data.status || null,
       amount: data.amount || null,
       nomeProduto: data?.products?.[0]?.name || "Pagamento Cartão",
-      email: data?.customer?.metadata?.email || null,
-      telefone: data?.customer?.metadata?.cellphone || null,
+      email: data?.customer?.email || null,
+      telefone: data?.customer?.cellphone || null,
       prazo: null,
     });
 

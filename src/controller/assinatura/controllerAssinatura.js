@@ -55,7 +55,7 @@ const mapearPlanoId = function (nomePlano, telefoneUsuario = null) {
     };
   }
 
-  if (nomeNormalizado.includes("inteligente")) {
+  if (nomeNormalizado.includes("inteligente") || nomeNormalizado.includes("intermediaria")) {
     return {
       plano_id: 3,
       ...estruturaBase,
@@ -86,7 +86,7 @@ const mapearPlanoId = function (nomePlano, telefoneUsuario = null) {
     };
   }
 
-  if (nomeNormalizado.includes("visionario")) {
+  if (nomeNormalizado.includes("visionario") || nomeNormalizado.includes("premium")) {
     return {
       plano_id: 4,
       ...estruturaBase,
@@ -728,6 +728,116 @@ async function handleSubscriptionCanceled(usuario, data, nowBrasilISO) {
   };
 }
 
+/**
+ * ATIVAR ASSINATURA VIA ABACATE PAY
+ * Chamado pelo controllerPagamento quando o status do pagamento é PAID.
+ * Reutiliza toda a lógica de mapearPlanoId, histórico, atualização de usuário e webhook n8n.
+ */
+const ativarAssinaturaAbacatePay = async function ({
+  tipo,       // "PIX" | "CARD"
+  checkoutId, // ID do pagamento retornado pela Abacate Pay
+  nomeProduto,
+  email,
+  telefone,
+  prazo,
+  status,
+}) {
+  try {
+    if (status !== "PAID") {
+      return {
+        status: false,
+        message: "Pagamento ainda não está aprovado (status diferente de PAID).",
+      };
+    }
+
+    const nowBrasilISO = () =>
+      new Date()
+        .toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" })
+        .replace(" ", "T");
+
+    // 1. Buscar usuário por email ou telefone
+    let usuario = null;
+    if (email) usuario = await usuarioDAO.selectByEmailUsuario(email);
+    if (!usuario && telefone) usuario = await usuarioDAO.selectByTelefoneUsuario(telefone);
+
+    if (!usuario?.id) {
+      return {
+        status: false,
+        message: "Pagamento aprovado, mas usuário não encontrado para vinculação.",
+      };
+    }
+
+    // 2. Mapear plano pelo nome do produto
+    const telefoneUsuario = telefone || usuario.telefone;
+    const planoInfo = mapearPlanoId(nomeProduto || "", telefoneUsuario);
+
+    if (!planoInfo) {
+      return {
+        status: false,
+        message: `Plano não identificado: "${nomeProduto}". Planos válidos: Essencial, Inteligente/Intermediário, Visionário/Premium.`,
+      };
+    }
+
+    // 3. Criar histórico (evita duplicatas pelo checkout_id)
+    const historicoExistente = await historicoAssinaturaDAO.selectHistoricoByCheckoutId(checkoutId);
+    let historico = historicoExistente;
+
+    if (!historicoExistente) {
+      historico = await historicoAssinaturaDAO.insertHistoricoAssinatura({
+        usuarioCodigo: usuario.id,
+        checkout_id: checkoutId,
+        nome_assinatura: nomeProduto,
+        dataAssinatura: nowBrasilISO(),
+        prazo: prazo || nowBrasilISO(),
+        plano_id_cakto: `abacatepay_${tipo.toLowerCase()}`,
+        plano_id: planoInfo.plano_id,
+        is_cancelado: false,
+      });
+      console.log("✅ [ABACATEPAY] Histórico criado:", historico?.id);
+    } else {
+      console.log("ℹ️ [ABACATEPAY] Histórico já existente para checkout_id:", checkoutId);
+    }
+
+    // 4. Atualizar plano do usuário
+    const usuarioAtualizado = await usuarioDAO.updateUsuario(usuario.id, {
+      plano_id: planoInfo.plano_id,
+      status_plano: nomeProduto,
+    });
+    console.log("✅ [ABACATEPAY] Usuário atualizado - plano_id:", planoInfo.plano_id);
+
+    // 5. Disparar webhook n8n (carrossel de boas-vindas)
+    try {
+      const response = await fetch("https://n8n.srv1056458.hstgr.cloud/webhook/enviarCarrosel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...planoInfo, phone: telefoneUsuario }),
+      });
+      if (response.ok) {
+        console.log("✅ [ABACATEPAY] Webhook carrossel enviado com sucesso");
+      } else {
+        console.error("⚠️ [ABACATEPAY] Webhook retornou erro:", response.status);
+      }
+    } catch (webhookError) {
+      console.error("⚠️ [ABACATEPAY] Erro ao chamar webhook n8n:", webhookError);
+    }
+
+    return {
+      status: true,
+      message: "Assinatura ativada com sucesso via Abacate Pay.",
+      usuario_id: usuario.id,
+      plano_id: planoInfo.plano_id,
+      historico_id: historico?.id || null,
+      usuario_atualizado: Boolean(usuarioAtualizado),
+    };
+  } catch (error) {
+    console.error("❌ Erro em ativarAssinaturaAbacatePay:", error);
+    return {
+      status: false,
+      message: "Erro interno ao ativar assinatura.",
+    };
+  }
+};
+
 module.exports = {
   criarAssinatura,
   atualizarAssinatura,
@@ -738,4 +848,5 @@ module.exports = {
   listarAssinaturas,
   webhookCakto,
   mapearPlanoId,
+  ativarAssinaturaAbacatePay,
 };
