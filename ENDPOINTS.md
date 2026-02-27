@@ -490,3 +490,54 @@ Deletar transação por código.
 - acessoLiberado (Boolean)
 - created_at (Timestamp)
 - updated_at (Timestamp)
+
+---
+
+## 💳 Pagamentos (Abacate Pay)
+
+> Rotas públicas (não exigem JWT).
+
+### POST `/api/pagamentos/pix`
+
+Gera QR Code PIX usando `POST /v1/pixQrCode/create`.
+
+**Body:**
+```json
+{
+  "amount": 123,
+  "expiresIn": 123,
+  "description": "Pagamento",
+  "name": "Daniel Lima",
+  "cellphone": "(11) 4002-8922",
+  "email": "daniel_lima@abacatepay.com",
+  "taxId": "123.456.789-01"
+}
+```
+
+**Retorno útil:** `pix.pix_copia_cola`, `pix.qr_code_base64`, `pix.expires_at`.
+
+### POST `/api/pagamentos/cartao`
+
+Cria cobrança com cartão e retorna o link para checkout.
+
+**Body:**
+```json
+{
+  "nome_produto": "Assinatura de Programa Fitness",
+  "descricao": "Acesso ao programa fitness premium por 1 mês.",
+  "quantidade": 2,
+  "valor_centavos": 2000,
+  "nome": "Daniel Lima",
+  "celular": "(11) 4002-8922",
+  "email": "daniel_lima@abacatepay.com",
+  "cpf_cnpj": "123.456.789-01",
+  "retorno_url": "https://example.com/billing",
+  "completion_url": "https://example.com/completion"
+}
+```
+
+**Retorno útil:** `checkout_url` (link para o usuário clicar e pagar).
+
+### POST `/api/pagamentos`
+
+Atalho para o mesmo fluxo de cartão (`/api/pagamentos/cartao`).
