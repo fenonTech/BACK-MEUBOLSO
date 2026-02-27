@@ -17,6 +17,7 @@ const controllerUsuario = require("../controller/usuario/controllerUsuario.js");
 const controllerTransacao = require("../controller/transacao/controllerTransacao.js");
 const controllerAssinatura = require("../controller/assinatura/controllerAssinatura.js");
 const controllerIdentificador = require("../controller/indentificador/controllerIdentificador.js");
+const controllerPagamento = require("../controller/pagamento/controllerPagamento.js");
 
 // ==============================
 // ROTAS DE AUTENTICAÇÃO
@@ -312,6 +313,23 @@ router.get(
     response.json(resultado);
   },
 );
+
+// ==============================
+// ROTA DE PAGAMENTOS (PROTEGIDA)
+// ==============================
+
+router.post("/pagamentos", autenticar, async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
+
+  let resultado = await controllerPagamento.criarPagamento(
+    dadosBody,
+    contentType,
+  );
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
 
 // ==============================
 // ROTA DE IDENTIFICADOR (SEM AUTENTICAÇÃO)
