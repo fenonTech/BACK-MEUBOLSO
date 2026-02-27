@@ -376,6 +376,26 @@ router.get(
   },
 );
 
+router.post("/pagamentos/cartao/confirmar", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
+
+  let resultado = await controllerPagamento.confirmarPagamentoCartao(dadosBody, contentType);
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+router.post("/pagamentos/teste/cartao/confirmar", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let dadosBody = request.body;
+
+  let resultado = await controllerPagamento.confirmarPagamentoCartao(dadosBody, contentType);
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
 router.post("/pagamentos/cartao", async (request, response) => {
   let contentType = request.headers["content-type"];
   let dadosBody = request.body;

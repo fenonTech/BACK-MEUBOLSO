@@ -456,6 +456,43 @@ const criarPagamentoTeste = async function (dadosPagamento, contentType) {
   return criarPagamentoCartao(dadosPagamento, contentType, true);
 };
 
+/**
+ * Confirmação direta de pagamento com cartão.
+ * Chamado pelo frontend quando o Abacate Pay redireciona para completion_url.
+ * O redirect para completion_url só ocorre após pagamento aprovado — não é necessário
+ * consultar o status na API do provider.
+ */
+const confirmarPagamentoCartao = async function (dados, contentType) {
+  if (!String(contentType || "").includes("application/json")) {
+    return { status: false, status_code: 415, message: "Content-Type deve ser application/json" };
+  }
+
+  const { billingId, nomeProduto, email, telefone } = dados || {};
+
+  if (!billingId || !nomeProduto || !email) {
+    return {
+      status: false,
+      status_code: 400,
+      message: "billingId, nomeProduto e email s\u00e3o obrigat\u00f3rios.",
+    };
+  }
+
+  const resultado = await controllerAssinatura.ativarAssinaturaAbacatePay({
+    tipo: "CARD",
+    checkoutId: billingId,
+    status: "PAID", // confiamos no redirect da completion_url
+    nomeProduto,
+    email,
+    telefone: telefone || null,
+    prazo: null,
+  });
+
+  return {
+    ...resultado,
+    status_code: resultado.status ? 200 : 422,
+  };
+};
+
 
 module.exports = {
   criarPagamento: criarPagamentoCartao,
@@ -468,4 +505,5 @@ module.exports = {
   criarPagamentoCartaoTeste,
   consultarPagamentoPixTeste,
   consultarPagamentoCartaoTeste,
+  confirmarPagamentoCartao,
 };
