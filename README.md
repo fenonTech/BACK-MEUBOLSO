@@ -1,5 +1,7 @@
 # API MEUBOLSO
 
+API DE PAGAMENTO https://backend-pearl-rho-82.vercel.app/api/pagamentos
+
 API REST para gerenciamento financeiro com integração Supabase (PostgreSQL).
 
 ## 📋 Estrutura do Banco de Dados
