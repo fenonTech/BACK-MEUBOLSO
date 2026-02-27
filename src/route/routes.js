@@ -345,6 +345,37 @@ router.post("/pagamentos/pix", async (request, response) => {
   response.json(resultado);
 });
 
+
+router.get("/pagamentos/pix/:pix_id/status", async (request, response) => {
+  let contentType = request.headers["content-type"] || "application/json";
+  let pixId = request.params.pix_id;
+
+  let resultado = await controllerPagamento.consultarPagamentoPix(
+    pixId,
+    contentType,
+  );
+
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+
+router.get(
+  "/pagamentos/cartao/:billing_id/status",
+  async (request, response) => {
+    let contentType = request.headers["content-type"] || "application/json";
+    let billingId = request.params.billing_id;
+
+    let resultado = await controllerPagamento.consultarPagamentoCartao(
+      billingId,
+      contentType,
+    );
+
+    response.status(resultado.status_code || 200);
+    response.json(resultado);
+  },
+);
+
 router.post("/pagamentos/cartao", async (request, response) => {
   let contentType = request.headers["content-type"];
   let dadosBody = request.body;

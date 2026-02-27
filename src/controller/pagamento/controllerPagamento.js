@@ -5,6 +5,8 @@
  **************************************************************************/
 
 const axios = require("axios");
+const usuarioDAO = require("../../model/DAO/usuario.js");
+const historicoAssinaturaDAO = require("../../model/DAO/historicoAssinatura.js");
 
 const ABACATEPAY_BASE_URL =
   process.env.ABACATEPAY_BASE_URL || "https://api.abacatepay.com/v1";
@@ -68,6 +70,94 @@ const handleProviderError = (error, endpointPath) => ({
     request_url: `${ABACATEPAY_BASE_URL}${endpointPath}`,
   },
 });
+
+const mapearPlanoId = (nomeProduto = "") => {
+  const nome = String(nomeProduto).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  if (nome.includes("essencial")) return { plano_id: 2, status_plano: "Plano Essencial" };
+  if (nome.includes("inteligente")) return { plano_id: 3, status_plano: "Plano Inteligente" };
+  if (nome.includes("visionario") || nome.includes("visionário"))
+    return { plano_id: 4, status_plano: "Plano Visionário" };
+
+  return null;
+};
+
+const registrarPagamentoAprovado = async ({
+  tipo,
+  providerId,
+  status,
+  amount,
+  nomeProduto,
+  email,
+  telefone,
+  prazo,
+}) => {
+  if (status !== "PAID") {
+    return {
+      status: false,
+      message: "Pagamento ainda não está aprovado (status diferente de PAID).",
+    };
+  }
+
+  let usuario = null;
+
+  if (email) {
+    usuario = await usuarioDAO.selectByEmailUsuario(email);
+  }
+
+  if (!usuario && telefone) {
+    usuario = await usuarioDAO.selectByTelefoneUsuario(telefone);
+  }
+
+  if (!usuario?.id) {
+    return {
+      status: false,
+      message: "Pagamento aprovado, mas usuário não encontrado para vinculação.",
+    };
+  }
+
+  const checkoutId = providerId;
+  const historicoExistente = await historicoAssinaturaDAO.selectHistoricoByCheckoutId(
+    checkoutId,
+  );
+
+  let historico = historicoExistente;
+
+  if (!historicoExistente) {
+    historico = await historicoAssinaturaDAO.insertHistoricoAssinatura({
+      usuarioCodigo: usuario.id,
+      checkout_id: checkoutId,
+      nome_assinatura: nomeProduto || `Pagamento ${tipo}`,
+      dataAssinatura: new Date().toISOString(),
+      prazo: prazo || new Date().toISOString(),
+      plano_id_cakto: `abacatepay_${tipo.toLowerCase()}`,
+      plano_id: usuario.plano_id || 1,
+      is_cancelado: false,
+    });
+  }
+
+  const plano = mapearPlanoId(nomeProduto);
+  let usuarioAtualizado = null;
+
+  if (plano) {
+    usuarioAtualizado = await usuarioDAO.updateUsuario(usuario.id, {
+      plano_id: plano.plano_id,
+      status_plano: plano.status_plano,
+    });
+  } else {
+    usuarioAtualizado = await usuarioDAO.updateUsuario(usuario.id, {
+      status_plano: `Pagamento ${tipo} aprovado (${amount || 0} centavos)`,
+    });
+  }
+
+  return {
+    status: true,
+    message: "Pagamento aprovado e vinculado ao usuário com sucesso.",
+    usuario_id: usuario.id,
+    historico_id: historico?.id || null,
+    usuario_atualizado: Boolean(usuarioAtualizado),
+  };
+};
 
 const validatePixInput = (dadosPagamento) => {
   const amount = Number(dadosPagamento?.amount || dadosPagamento?.valor_centavos);
@@ -144,6 +234,17 @@ const criarPagamentoPix = async function (dadosPagamento, contentType) {
 
     const data = response.data?.data || {};
 
+    const controleUsuario = await registrarPagamentoAprovado({
+      tipo: "PIX",
+      providerId: data.id || null,
+      status: data.status || null,
+      amount: data.amount || Number(dadosPagamento?.amount || dadosPagamento?.valor_centavos),
+      nomeProduto: dadosPagamento?.nome_produto || dadosPagamento?.description,
+      email: data?.customer?.metadata?.email || dadosPagamento?.email,
+      telefone: data?.customer?.metadata?.cellphone || dadosPagamento?.celular,
+      prazo: data.expiresAt || null,
+    });
+
     return {
       status: true,
       status_code: 201,
@@ -156,6 +257,7 @@ const criarPagamentoPix = async function (dadosPagamento, contentType) {
         qr_code_base64: data.brCodeBase64 || null,
         expires_at: data.expiresAt || null,
       },
+      controle_usuario: controleUsuario,
     };
   } catch (error) {
     return handleProviderError(error, "/pixQrCode/create");
@@ -252,15 +354,155 @@ const criarPagamentoCartao = async function (dadosPagamento, contentType) {
 
     const data = response.data?.data || {};
 
+    const controleUsuario = await registrarPagamentoAprovado({
+      tipo: "CARD",
+      providerId: data.id || null,
+      status: data.status || null,
+      amount: data.amount || Number(dadosPagamento?.valor_centavos),
+      nomeProduto: dadosPagamento?.nome_produto,
+      email: data?.customer?.metadata?.email || dadosPagamento?.email,
+      telefone: data?.customer?.metadata?.cellphone || dadosPagamento?.celular,
+      prazo: null,
+    });
+
     return {
       status: true,
       status_code: 201,
       message: "Pagamento com cartão criado com sucesso",
       pagamento: response.data,
       checkout_url: data.url || null,
+      controle_usuario: controleUsuario,
     };
   } catch (error) {
     return handleProviderError(error, "/billing/create");
+  }
+};
+
+const consultarPagamentoPix = async function (pixId, contentType) {
+  const baseError = validateBaseInput(contentType || "application/json");
+  if (baseError) return baseError;
+
+  if (!pixId) {
+    return {
+      status: false,
+      status_code: 400,
+      message: "pix_id é obrigatório.",
+    };
+  }
+
+  try {
+    let response;
+
+    try {
+      response = await axios.get(`${ABACATEPAY_BASE_URL}/pixQrCode/check`, {
+        timeout: 20000,
+        headers: getCommonHeaders(),
+        params: { id: pixId },
+      });
+    } catch (getError) {
+      response = await axios.post(
+        `${ABACATEPAY_BASE_URL}/pixQrCode/check`,
+        { id: pixId },
+        {
+          timeout: 20000,
+          headers: getCommonHeaders(),
+        },
+      );
+    }
+
+    const data = response.data?.data || {};
+
+    const controleUsuario = await registrarPagamentoAprovado({
+      tipo: "PIX",
+      providerId: data.id || pixId,
+      status: data.status || null,
+      amount: data.amount || null,
+      nomeProduto: data?.description || "Pagamento PIX",
+      email: data?.customer?.metadata?.email || null,
+      telefone: data?.customer?.metadata?.cellphone || null,
+      prazo: data.expiresAt || null,
+    });
+
+    return {
+      status: true,
+      status_code: 200,
+      message: "Status do PIX consultado com sucesso",
+      pagamento: response.data,
+      pix: {
+        id: data.id || pixId,
+        status: data.status || null,
+        pago: data.status === "PAID",
+        pix_copia_cola: data.brCode || null,
+        qr_code_base64: data.brCodeBase64 || null,
+        expires_at: data.expiresAt || null,
+      },
+      controle_usuario: controleUsuario,
+    };
+  } catch (error) {
+    return handleProviderError(error, "/pixQrCode/check");
+  }
+};
+
+const consultarPagamentoCartao = async function (billingId, contentType) {
+  const baseError = validateBaseInput(contentType || "application/json");
+  if (baseError) return baseError;
+
+  if (!billingId) {
+    return {
+      status: false,
+      status_code: 400,
+      message: "billing_id é obrigatório.",
+    };
+  }
+
+  try {
+    let response;
+
+    try {
+      response = await axios.get(`${ABACATEPAY_BASE_URL}/billing/check`, {
+        timeout: 20000,
+        headers: getCommonHeaders(),
+        params: { id: billingId },
+      });
+    } catch (getError) {
+      response = await axios.post(
+        `${ABACATEPAY_BASE_URL}/billing/check`,
+        { id: billingId },
+        {
+          timeout: 20000,
+          headers: getCommonHeaders(),
+        },
+      );
+    }
+
+    const data = response.data?.data || {};
+
+    const controleUsuario = await registrarPagamentoAprovado({
+      tipo: "CARD",
+      providerId: data.id || billingId,
+      status: data.status || null,
+      amount: data.amount || null,
+      nomeProduto: data?.products?.[0]?.name || "Pagamento Cartão",
+      email: data?.customer?.metadata?.email || null,
+      telefone: data?.customer?.metadata?.cellphone || null,
+      prazo: null,
+    });
+
+    return {
+      status: true,
+      status_code: 200,
+      message: "Status do pagamento com cartão consultado com sucesso",
+      pagamento: response.data,
+      checkout_url: data.url || null,
+      cartao: {
+        id: data.id || billingId,
+        status: data.status || null,
+        pago: data.status === "PAID",
+      },
+      controle_usuario: controleUsuario,
+    };
+  } catch (error) {
+    return handleProviderError(error, "/billing/check");
   }
 };
 
@@ -268,4 +510,6 @@ module.exports = {
   criarPagamento: criarPagamentoCartao,
   criarPagamentoPix,
   criarPagamentoCartao,
+  consultarPagamentoPix,
+  consultarPagamentoCartao,
 };
