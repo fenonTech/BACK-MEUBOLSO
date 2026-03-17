@@ -17,15 +17,18 @@ const onlyDefined = (obj) =>
     ),
   );
 
-const getApiKey = (isTeste = false) =>
-  isTeste ? process.env.ABACATEPAY_API_KEY_TEST : process.env.ABACATEPAY_API_KEY;
+const getApiKey = (isTeste = false, isV2 = false) => {
+  if (isTeste) return process.env.ABACATEPAY_API_KEY_TEST;
+  if (isV2) return process.env.ABACATEPAY_API_KEY_V2 || process.env.ABACATEPAY_API_KEY;
+  return process.env.ABACATEPAY_API_KEY;
+};
 
-const getCommonHeaders = (isTeste = false) => ({
-  Authorization: `Bearer ${getApiKey(isTeste)}`,
+const getCommonHeaders = (isTeste = false, isV2 = false) => ({
+  Authorization: `Bearer ${getApiKey(isTeste, isV2)}`,
   "Content-Type": "application/json",
 });
 
-const validateBaseInput = (contentType, isTeste = false) => {
+const validateBaseInput = (contentType, isTeste = false, isV2 = false) => {
   if (!String(contentType || "").includes("application/json")) {
     return {
       status: false,
@@ -34,13 +37,15 @@ const validateBaseInput = (contentType, isTeste = false) => {
     };
   }
 
-  if (!getApiKey(isTeste)) {
+  if (!getApiKey(isTeste, isV2)) {
     return {
       status: false,
       status_code: 500,
       message: isTeste
         ? "ABACATEPAY_API_KEY_TEST não configurada."
-        : "ABACATEPAY_API_KEY não configurada.",
+        : isV2
+          ? "ABACATEPAY_API_KEY_V2 (ou ABACATEPAY_API_KEY) não configurada."
+          : "ABACATEPAY_API_KEY não configurada.",
     };
   }
 
@@ -552,7 +557,7 @@ const resolverProdutoId = (dados) => {
  * cycle: "WEEKLY" | "MONTHLY" | "SEMIANNUALLY" | "ANNUALLY"  (padrão: "MONTHLY")
  */
 const criarProdutoAssinatura = async function (dados, contentType, isTeste = false) {
-  const baseError = validateBaseInput(contentType, isTeste);
+  const baseError = validateBaseInput(contentType, isTeste, true);
   if (baseError) return baseError;
 
   const { external_id, nome, valor_centavos, cycle, descricao, image_url } = dados || {};
@@ -595,7 +600,7 @@ const criarProdutoAssinatura = async function (dados, contentType, isTeste = fal
         description: descricao,
         imageUrl: image_url,
       }),
-      { timeout: 20000, headers: getCommonHeaders(isTeste) },
+      { timeout: 20000, headers: getCommonHeaders(isTeste, true) },
     );
 
     return {
@@ -616,7 +621,7 @@ const criarProdutoAssinatura = async function (dados, contentType, isTeste = fal
  * Query (opcional): { status?, id?, external_id?, limit?, after?, before? }
  */
 const listarProdutos = async function (filtros, contentType, isTeste = false) {
-  const baseError = validateBaseInput(contentType || "application/json", isTeste);
+  const baseError = validateBaseInput(contentType || "application/json", isTeste, true);
   if (baseError) return baseError;
 
   const { status, id, external_id, limit, after, before } = filtros || {};
@@ -626,7 +631,7 @@ const listarProdutos = async function (filtros, contentType, isTeste = false) {
       `${ABACATEPAY_BASE_URL_V2}/products/list`,
       {
         timeout: 20000,
-        headers: getCommonHeaders(isTeste),
+        headers: getCommonHeaders(isTeste, true),
         params: onlyDefined({ status, id, externalId: external_id, limit, after, before }),
       },
     );
@@ -652,7 +657,7 @@ const listarProdutos = async function (filtros, contentType, isTeste = false) {
  * produto_id: ID do produto criado via criarProdutoAssinatura (ex: "prod_abc123xyz")
  */
 const criarAssinaturaCartao = async function (dados, contentType, isTeste = false) {
-  const baseError = validateBaseInput(contentType, isTeste);
+  const baseError = validateBaseInput(contentType, isTeste, true);
   if (baseError) return baseError;
 
   const { retorno_url, completion_url, customer_id, external_id, metadata } = dados || {};
@@ -679,7 +684,7 @@ const criarAssinaturaCartao = async function (dados, contentType, isTeste = fals
         externalId: external_id,
         metadata,
       }),
-      { timeout: 20000, headers: getCommonHeaders(isTeste) },
+      { timeout: 20000, headers: getCommonHeaders(isTeste, true) },
     );
 
     const data = response.data?.data || {};
@@ -703,7 +708,7 @@ const criarAssinaturaCartao = async function (dados, contentType, isTeste = fals
  * Query (opcional): { status?, id?, email?, tax_id?, external_id?, limit?, after?, before? }
  */
 const listarAssinaturasAbacatePay = async function (filtros, contentType, isTeste = false) {
-  const baseError = validateBaseInput(contentType || "application/json", isTeste);
+  const baseError = validateBaseInput(contentType || "application/json", isTeste, true);
   if (baseError) return baseError;
 
   const { status, id, email, tax_id, external_id, limit, after, before } = filtros || {};
@@ -713,7 +718,7 @@ const listarAssinaturasAbacatePay = async function (filtros, contentType, isTest
       `${ABACATEPAY_BASE_URL_V2}/subscriptions/list`,
       {
         timeout: 20000,
-        headers: getCommonHeaders(isTeste),
+        headers: getCommonHeaders(isTeste, true),
         params: onlyDefined({ status, id, email, taxId: tax_id, externalId: external_id, limit, after, before }),
       },
     );
