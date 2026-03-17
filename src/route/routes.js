@@ -482,6 +482,86 @@ router.get(
 );
 
 // ==============================
+// WEBHOOK ABACATEPAY — ASSINATURAS RECORRENTES (SEM AUTENTICAÇÃO)
+// ==============================
+
+router.post("/webhook/abacatepay", async (request, response) => {
+  let resultado = await controllerAssinatura.webhookAbacatePay(request.body);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+// ==============================
+// ROTAS DE ASSINATURAS RECORRENTES COM CARTÃO — API v2 (SEM AUTENTICAÇÃO)
+// ==============================
+
+// Criar produto de assinatura (com cycle: MONTHLY, WEEKLY, etc.)
+// Body: { external_id, nome, valor_centavos, cycle?, descricao?, image_url? }
+router.post("/pagamentos/assinatura/produto", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let resultado = await controllerPagamento.criarProdutoAssinatura(request.body, contentType);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+// Listar produtos cadastrados no AbacatePay
+// Query: ?status=ACTIVE&id=prod_xxx&external_id=xxx&limit=100
+router.get("/pagamentos/assinatura/produtos", async (request, response) => {
+  let contentType = request.headers["content-type"] || "application/json";
+  let resultado = await controllerPagamento.listarProdutos(request.query, contentType);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+// Criar checkout de assinatura recorrente com cartão
+// Body: { produto_id, retorno_url?, completion_url?, customer_id?, external_id?, metadata? }
+router.post("/pagamentos/assinatura", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let resultado = await controllerPagamento.criarAssinaturaCartao(request.body, contentType);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+// Listar checkouts de assinatura
+// Query: ?status=PAID&email=x&id=bill_xxx&limit=100
+router.get("/pagamentos/assinaturas", async (request, response) => {
+  let contentType = request.headers["content-type"] || "application/json";
+  let resultado = await controllerPagamento.listarAssinaturasAbacatePay(request.query, contentType);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+// --- Versões de TESTE ---
+
+router.post("/pagamentos/teste/assinatura/produto", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let resultado = await controllerPagamento.criarProdutoAssinaturaTeste(request.body, contentType);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+router.get("/pagamentos/teste/assinatura/produtos", async (request, response) => {
+  let contentType = request.headers["content-type"] || "application/json";
+  let resultado = await controllerPagamento.listarProdutosTeste(request.query, contentType);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+router.post("/pagamentos/teste/assinatura", async (request, response) => {
+  let contentType = request.headers["content-type"];
+  let resultado = await controllerPagamento.criarAssinaturaCartaoTeste(request.body, contentType);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+router.get("/pagamentos/teste/assinaturas", async (request, response) => {
+  let contentType = request.headers["content-type"] || "application/json";
+  let resultado = await controllerPagamento.listarAssinaturasAbacatePayTeste(request.query, contentType);
+  response.status(resultado.status_code || 200);
+  response.json(resultado);
+});
+
+// ==============================
 // ROTA DE IDENTIFICADOR (SEM AUTENTICAÇÃO)
 // ==============================
 

@@ -494,6 +494,248 @@ const confirmarPagamentoCartao = async function (dados, contentType) {
 };
 
 
+// ============================================================
+// ASSINATURAS RECORRENTES COM CARTÃO (AbacatePay Subscription - API v2)
+// ============================================================
+//
+// Fluxo correto conforme documentação AbacatePay:
+//   1. Crie um produto com cycle (MONTHLY, WEEKLY, etc.) via criarProdutoAssinatura
+//      → O produto deve ter nome contendo "Essencial", "Inteligente" ou "Visionário"
+//        para o mapeamento automático de plano_id funcionar.
+//   2. Use o produto_id retornado para criar a assinatura via criarAssinaturaCartao
+//      → Retorna checkout_url para redirecionar o cliente
+//   3. O AbacatePay dispara webhook POST /webhook/abacatepay quando o cliente paga
+//
+// ⚠️  Endpoints de assinaturas e produtos usam v2 da API AbacatePay.
+// ============================================================
+
+const ABACATEPAY_BASE_URL_V2 = "https://api.abacatepay.com/v2";
+
+const CYCLES_VALIDOS = ["WEEKLY", "MONTHLY", "SEMIANNUALLY", "ANNUALLY"];
+
+// Mapeamento plano + ciclo → produto_id AbacatePay
+const PRODUTOS_ASSINATURA = {
+  essencial: {
+    mensal:  "prod_nMNc1Z0DgkAAyExPNJM5gzU0",
+    anual:   "prod_5pggTS40mBK1EYZsYjAqk6dF",
+  },
+  inteligente: {
+    mensal:  "prod_5jU0hScBNDqHGkhhAemCQJ0k",
+    anual:   "prod_z5EDRfygzX4BdwJYSnyCkjXt",
+  },
+  visionario: {
+    mensal:  "prod_skDrLddqx20SjfCuQz6aaAXk",
+    anual:   "prod_1DGA0HsQkXHCP34JuDtcTukD",
+  },
+};
+
+const resolverProdutoId = (dados) => {
+  const { produto_id, plano, ciclo } = dados || {};
+
+  if (produto_id) return produto_id;
+
+  if (plano && ciclo) {
+    const planoNorm = plano.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const cicloNorm = ciclo.toLowerCase();
+    return PRODUTOS_ASSINATURA[planoNorm]?.[cicloNorm] || null;
+  }
+
+  return null;
+};
+
+/**
+ * Cria um produto de assinatura no AbacatePay.
+ * O produto deve ter nome contendo "Essencial", "Inteligente" ou "Visionário"
+ * para o mapeamento automático de plano_id no webhook funcionar.
+ *
+ * Body: { external_id, nome, valor_centavos, cycle?, descricao?, image_url? }
+ * cycle: "WEEKLY" | "MONTHLY" | "SEMIANNUALLY" | "ANNUALLY"  (padrão: "MONTHLY")
+ */
+const criarProdutoAssinatura = async function (dados, contentType, isTeste = false) {
+  const baseError = validateBaseInput(contentType, isTeste);
+  if (baseError) return baseError;
+
+  const { external_id, nome, valor_centavos, cycle, descricao, image_url } = dados || {};
+
+  if (!external_id || !nome || !valor_centavos) {
+    return {
+      status: false,
+      status_code: 400,
+      message: "external_id, nome e valor_centavos são obrigatórios.",
+    };
+  }
+
+  if (Number.isNaN(Number(valor_centavos)) || Number(valor_centavos) <= 0) {
+    return {
+      status: false,
+      status_code: 400,
+      message: "valor_centavos deve ser um número maior que zero.",
+    };
+  }
+
+  const cycleFinal = (cycle || "MONTHLY").toUpperCase();
+
+  if (!CYCLES_VALIDOS.includes(cycleFinal)) {
+    return {
+      status: false,
+      status_code: 400,
+      message: `cycle inválido. Valores aceitos: ${CYCLES_VALIDOS.join(", ")}`,
+    };
+  }
+
+  try {
+    const response = await axios.post(
+      `${ABACATEPAY_BASE_URL_V2}/products/create`,
+      onlyDefined({
+        externalId: external_id,
+        name: nome,
+        price: Number(valor_centavos),
+        currency: "BRL",
+        cycle: cycleFinal,
+        description: descricao,
+        imageUrl: image_url,
+      }),
+      { timeout: 20000, headers: getCommonHeaders(isTeste) },
+    );
+
+    return {
+      status: true,
+      status_code: 201,
+      message: "Produto de assinatura criado com sucesso",
+      produto: response.data?.data || response.data,
+    };
+  } catch (error) {
+    return handleProviderError(error, "/v2/products/create");
+  }
+};
+
+/**
+ * Lista os produtos cadastrados no AbacatePay.
+ * Use para consultar os IDs dos produtos de assinatura.
+ *
+ * Query (opcional): { status?, id?, external_id?, limit?, after?, before? }
+ */
+const listarProdutos = async function (filtros, contentType, isTeste = false) {
+  const baseError = validateBaseInput(contentType || "application/json", isTeste);
+  if (baseError) return baseError;
+
+  const { status, id, external_id, limit, after, before } = filtros || {};
+
+  try {
+    const response = await axios.get(
+      `${ABACATEPAY_BASE_URL_V2}/products/list`,
+      {
+        timeout: 20000,
+        headers: getCommonHeaders(isTeste),
+        params: onlyDefined({ status, id, externalId: external_id, limit, after, before }),
+      },
+    );
+
+    return {
+      status: true,
+      status_code: 200,
+      message: "Produtos listados com sucesso",
+      produtos: response.data?.data || [],
+      paginacao: response.data?.pagination || null,
+    };
+  } catch (error) {
+    return handleProviderError(error, "/v2/products/list");
+  }
+};
+
+/**
+ * Cria um checkout de assinatura recorrente com cartão.
+ * Retorna checkout_url que o cliente acessa para inserir os dados do cartão.
+ * O AbacatePay dispara o webhook após o primeiro pagamento.
+ *
+ * Body: { produto_id, retorno_url?, completion_url?, customer_id?, external_id?, metadata? }
+ * produto_id: ID do produto criado via criarProdutoAssinatura (ex: "prod_abc123xyz")
+ */
+const criarAssinaturaCartao = async function (dados, contentType, isTeste = false) {
+  const baseError = validateBaseInput(contentType, isTeste);
+  if (baseError) return baseError;
+
+  const { retorno_url, completion_url, customer_id, external_id, metadata } = dados || {};
+
+  const produto_id = resolverProdutoId(dados);
+
+  if (!produto_id) {
+    return {
+      status: false,
+      status_code: 400,
+      message:
+        "Informe produto_id diretamente, ou plano (essencial | inteligente | visionario) + ciclo (mensal | anual).",
+    };
+  }
+
+  try {
+    const response = await axios.post(
+      `${ABACATEPAY_BASE_URL_V2}/subscriptions/create`,
+      onlyDefined({
+        items: [{ id: produto_id, quantity: 1 }],
+        returnUrl: retorno_url,
+        completionUrl: completion_url,
+        customerId: customer_id,
+        externalId: external_id,
+        metadata,
+      }),
+      { timeout: 20000, headers: getCommonHeaders(isTeste) },
+    );
+
+    const data = response.data?.data || {};
+
+    return {
+      status: true,
+      status_code: 201,
+      message: "Checkout de assinatura criado. Redirecione o cliente para checkout_url.",
+      assinatura: response.data,
+      checkout_url: data.url || null,
+      subscription_id: data.id || null,
+    };
+  } catch (error) {
+    return handleProviderError(error, "/v2/subscriptions/create");
+  }
+};
+
+/**
+ * Lista os checkouts de assinatura do AbacatePay.
+ *
+ * Query (opcional): { status?, id?, email?, tax_id?, external_id?, limit?, after?, before? }
+ */
+const listarAssinaturasAbacatePay = async function (filtros, contentType, isTeste = false) {
+  const baseError = validateBaseInput(contentType || "application/json", isTeste);
+  if (baseError) return baseError;
+
+  const { status, id, email, tax_id, external_id, limit, after, before } = filtros || {};
+
+  try {
+    const response = await axios.get(
+      `${ABACATEPAY_BASE_URL_V2}/subscriptions/list`,
+      {
+        timeout: 20000,
+        headers: getCommonHeaders(isTeste),
+        params: onlyDefined({ status, id, email, taxId: tax_id, externalId: external_id, limit, after, before }),
+      },
+    );
+
+    return {
+      status: true,
+      status_code: 200,
+      message: "Assinaturas listadas com sucesso",
+      assinaturas: response.data?.data || [],
+      paginacao: response.data?.pagination || null,
+    };
+  } catch (error) {
+    return handleProviderError(error, "/v2/subscriptions/list");
+  }
+};
+
+// Versões de teste
+const criarProdutoAssinaturaTeste = (dados, ct) => criarProdutoAssinatura(dados, ct, true);
+const listarProdutosTeste = (filtros, ct) => listarProdutos(filtros, ct, true);
+const criarAssinaturaCartaoTeste = (dados, ct) => criarAssinaturaCartao(dados, ct, true);
+const listarAssinaturasAbacatePayTeste = (filtros, ct) => listarAssinaturasAbacatePay(filtros, ct, true);
+
 module.exports = {
   criarPagamento: criarPagamentoCartao,
   criarPagamentoPix,
@@ -506,4 +748,13 @@ module.exports = {
   consultarPagamentoPixTeste,
   consultarPagamentoCartaoTeste,
   confirmarPagamentoCartao,
+  // Assinaturas recorrentes (v2)
+  criarProdutoAssinatura,
+  listarProdutos,
+  criarAssinaturaCartao,
+  listarAssinaturasAbacatePay,
+  criarProdutoAssinaturaTeste,
+  listarProdutosTeste,
+  criarAssinaturaCartaoTeste,
+  listarAssinaturasAbacatePayTeste,
 };

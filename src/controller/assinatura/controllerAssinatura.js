@@ -838,6 +838,234 @@ const ativarAssinaturaAbacatePay = async function ({
   }
 };
 
+/**
+ * WEBHOOK ABACATEPAY - Processar eventos de assinatura recorrente com cartão
+ *
+ * Eventos tratados:
+ *  - subscription.subscribed → nova assinatura paga (ativa o plano)
+ *  - subscription.renewed    → renovação mensal paga (atualiza prazo)
+ *  - subscription.canceled   → assinatura cancelada
+ *
+ * Payload esperado do AbacatePay:
+ * {
+ *   event: "subscription.subscribed" | "subscription.renewed" | "subscription.canceled",
+ *   data: {
+ *     subscription: { id, status, nextBillingDate },
+ *     plan: { id, name, amount, interval },
+ *     customer: { name, email, cellphone, taxId }
+ *   }
+ * }
+ */
+const webhookAbacatePay = async function (payload) {
+  try {
+    console.log("\n========== WEBHOOK ABACATEPAY - INÍCIO ==========");
+    console.log("📦 Payload recebido:", JSON.stringify(payload, null, 2));
+
+    const { event, data } = payload || {};
+
+    if (!event || !data) {
+      console.error("❌ Payload inválido - event ou data ausente");
+      return { status: false, status_code: 400, message: "Payload inválido" };
+    }
+
+    console.log("🔍 Evento:", event);
+
+    const nowBrasilISO = () =>
+      new Date()
+        .toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" })
+        .replace(" ", "T");
+
+    switch (event) {
+      case "subscription.subscribed":
+        return await handleAbacateSubscribed(data, nowBrasilISO);
+
+      case "subscription.renewed":
+        return await handleAbacateRenewed(data, nowBrasilISO);
+
+      case "subscription.canceled":
+        return await handleAbacateCanceled(data, nowBrasilISO);
+
+      default:
+        console.log("ℹ️ [ABACATEPAY WEBHOOK] Evento ignorado:", event);
+        return {
+          status: true,
+          status_code: 200,
+          message: `Evento "${event}" recebido e ignorado`,
+        };
+    }
+  } catch (error) {
+    console.error("❌ Erro no webhook AbacatePay:", error);
+    console.error("Stack trace:", error.stack);
+    return { status: false, status_code: 500, message: "Erro ao processar webhook" };
+  }
+};
+
+/**
+ * Handler: subscription.subscribed — primeira cobrança paga, ativa assinatura
+ */
+async function handleAbacateSubscribed(data, nowBrasilISO) {
+  console.log("\n✨ === SUBSCRIPTION.SUBSCRIBED ===");
+
+  const subscription = data?.subscription || {};
+  const plan = data?.plan || {};
+  const customer = data?.customer || {};
+
+  const checkoutId = subscription.id;
+  const nomeProduto = plan.name;
+  const email = customer.email;
+  const telefone = customer.cellphone
+    ? customer.cellphone.startsWith("+") ? customer.cellphone : `+${customer.cellphone}`
+    : null;
+  const prazo = subscription.nextBillingDate || null;
+
+  console.log("📋 Dados:", { checkoutId, nomeProduto, email, telefone, prazo });
+
+  // Reutiliza a lógica centralizada de ativarAssinaturaAbacatePay
+  const resultado = await ativarAssinaturaAbacatePay({
+    tipo: "SUBSCRIPTION",
+    checkoutId,
+    status: "PAID",
+    nomeProduto,
+    email,
+    telefone,
+    prazo,
+  });
+
+  console.log("✅ SUBSCRIPTION.SUBSCRIBED finalizado\n");
+  return {
+    ...resultado,
+    status_code: resultado.status ? 201 : 422,
+    message: resultado.status
+      ? "Assinatura ativada com sucesso via AbacatePay"
+      : resultado.message,
+  };
+}
+
+/**
+ * Handler: subscription.renewed — renovação automática paga, atualiza prazo
+ */
+async function handleAbacateRenewed(data, nowBrasilISO) {
+  console.log("\n🔄 === SUBSCRIPTION.RENEWED ===");
+
+  const subscription = data?.subscription || {};
+  const plan = data?.plan || {};
+  const customer = data?.customer || {};
+
+  const checkoutId = subscription.id;
+  const nomeProduto = plan.name;
+  const email = customer.email;
+  const telefone = customer.cellphone
+    ? customer.cellphone.startsWith("+") ? customer.cellphone : `+${customer.cellphone}`
+    : null;
+  const prazo = subscription.nextBillingDate || null;
+
+  console.log("📋 Dados:", { checkoutId, nomeProduto, email, telefone, prazo });
+
+  // Buscar usuário
+  let usuario = null;
+  if (email) usuario = await usuarioDAO.selectByEmailUsuario(email);
+  if (!usuario && telefone) usuario = await usuarioDAO.selectByTelefoneUsuario(telefone);
+
+  if (!usuario?.id) {
+    return { status: false, status_code: 422, message: "Usuário não encontrado para renovação." };
+  }
+
+  const planoInfo = mapearPlanoId(nomeProduto || "", telefone || usuario.telefone);
+  if (!planoInfo) {
+    return {
+      status: false,
+      status_code: 400,
+      message: `Plano não identificado: "${nomeProduto}".`,
+    };
+  }
+
+  // Inserir novo registro de histórico para a renovação
+  const historico = await historicoAssinaturaDAO.insertHistoricoAssinatura({
+    usuarioCodigo: usuario.id,
+    checkout_id: `${checkoutId}_renewal_${Date.now()}`,
+    nome_assinatura: nomeProduto,
+    dataAssinatura: nowBrasilISO(),
+    prazo: prazo || nowBrasilISO(),
+    plano_id_cakto: `abacatepay_subscription_renewed`,
+    plano_id: planoInfo.plano_id,
+    is_cancelado: false,
+  });
+
+  // Garantir que plano_id e status_plano do usuário continuam corretos
+  await usuarioDAO.updateUsuario(usuario.id, {
+    plano_id: planoInfo.plano_id,
+    status_plano: nomeProduto,
+  });
+
+  // Webhook n8n — mensagem de renovação
+  try {
+    const mensagemRenovacao = {
+      ...planoInfo,
+      phone: telefone || usuario.telefone,
+      message: planoInfo.message.includes("foi ativada")
+        ? planoInfo.message.replace("foi ativada", "foi renovada")
+        : planoInfo.message,
+    };
+    await fetch("https://n8n.srv1056458.hstgr.cloud/webhook/enviarCarrosel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(mensagemRenovacao),
+    });
+    console.log("✅ [ABACATEPAY RENEWED] Webhook carrossel enviado");
+  } catch (webhookError) {
+    console.error("⚠️ [ABACATEPAY RENEWED] Erro ao chamar webhook n8n:", webhookError);
+  }
+
+  console.log("✅ SUBSCRIPTION.RENEWED finalizado\n");
+  return {
+    status: true,
+    status_code: 200,
+    message: "Assinatura renovada com sucesso via AbacatePay",
+    historico_id: historico?.id || null,
+    usuario_id: usuario.id,
+    plano_id: planoInfo.plano_id,
+  };
+}
+
+/**
+ * Handler: subscription.canceled — cancela o histórico da assinatura
+ */
+async function handleAbacateCanceled(data, nowBrasilISO) {
+  console.log("\n❌ === SUBSCRIPTION.CANCELED ===");
+
+  const subscription = data?.subscription || {};
+  const checkoutId = subscription.id;
+
+  console.log("🔑 Subscription ID:", checkoutId);
+
+  if (!checkoutId) {
+    return { status: false, status_code: 400, message: "subscription.id ausente no payload." };
+  }
+
+  // Tenta cancelar pelo checkout_id exato
+  const historicoCancelado = await historicoAssinaturaDAO.cancelarHistoricoAssinatura(
+    checkoutId,
+    nowBrasilISO(),
+  );
+
+  if (!historicoCancelado) {
+    console.error("⚠️ Histórico não encontrado para checkout_id:", checkoutId);
+    return {
+      status: false,
+      status_code: 404,
+      message: "Assinatura não encontrada para cancelamento.",
+    };
+  }
+
+  console.log("✅ SUBSCRIPTION.CANCELED finalizado\n");
+  return {
+    status: true,
+    status_code: 200,
+    message: "Assinatura cancelada com sucesso via AbacatePay",
+    historico: historicoCancelado,
+  };
+}
+
 module.exports = {
   criarAssinatura,
   atualizarAssinatura,
@@ -847,6 +1075,7 @@ module.exports = {
   verificarAssinaturaAtiva,
   listarAssinaturas,
   webhookCakto,
+  webhookAbacatePay,
   mapearPlanoId,
   ativarAssinaturaAbacatePay,
 };
